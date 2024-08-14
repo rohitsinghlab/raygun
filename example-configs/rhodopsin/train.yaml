@@ -1,0 +1,43 @@
+## This YAML file specifies all the parameters for finetuning Raygun, or training it from scratch ##
+
+##  At start, we suggest focusing only on parameters in Sections 1 and 2.  
+###### Section 1: GPU, INPUT and OUTPUT Locations ########
+# your cuda device. If you only have one, 0 is likely the default
+device: 0
+
+## INPUT ##
+
+# the input sequence(s) for training or finetuning. Requires the training fasta file. If the validation fasta not specified, the training epoch will not perform the validation step
+trainfasta: "example-configs/rhodopsin/selected-PF00001-prots.fasta"
+# validfasta: "example-configs/rhodopsin/selected-PF00001-prots.fasta"
+
+# embedding location. If specified, the ESM-2 outputs will be saved at this location. If set to null, the embeddings are not saved
+esm2_embedding_saveloc: null
+
+# folder where the output model is to be saved. REQUIRED
+output_model_loc: "rhodopsin-trained"
+# if the `checkpoint` is specified, the training/finetuning will begin from this checkpoint. If not provided, the program will use the pretrain model
+# checkpoint: "rhodopsin/epoch_5.sav"
+
+# Set this to true if the goal is finetuning. Finetuning freezes the encoder parameters only updating the Raygun decoder
+# For training from scratch, set `finetune: false`. Default: false
+finetune: false
+
+## Total number of epochs to train/finetune, and the learning rate
+epoch: 50
+lr: 0.0001
+# Default: 1, model is saved at every multiples of this parameter
+save_every: 50
+
+###### Section 3: OTHER PARAMETERS ########
+## you can ignore these for now
+usereconstructionloss: true
+usereplicateloss: true
+usecrossentropyloss: true
+reconstructionlossratio: 1
+replicatelossratio: 1
+crossentropylossratio: 1
+maxlength: 1000
+minallowedlength: 55
+clip: 0.0001
+saveoptimizerstate: false

@@ -1,0 +1,78 @@
+## This YAML file specifies all the parameters for using Raygun. ##
+##  At start, we suggest focusing only on parameters in Sections 1 and 2.  
+
+###### Section 1: GPU, INPUT and OUTPUT Locations ########
+
+# your cuda device. If you only have one, 0 is likely the default
+device: 0  
+
+## INPUT ##
+
+# the input sequence(s). If you specify more than one, the behaviour
+#   will be the same as if you ran Raygun separately on each of them
+templatefasta: "example-configs/rhodopsin/templates.fasta" 
+
+
+## FINE-TUNING ##
+
+## We strongly recommend starting from our pre-trained
+## model and fine-tune it for your sequences.
+ 
+## First time fine-tuning (or to overwrite previous fine-tune). Comment these lines if reusing fine-tuned model. 
+finetune: true  # will overwrite the existing models in model folder if it exists
+finetunetrain: "example-configs/rhodopsin/selected-PF00001-prots.fasta" # a single fasta file containing 1 or more sequences you want to fine-tune the decoder on
+finetuned_model_loc: "rhodopsin-finetuned-with-selected-PF00001-prots"  # folder where models are saved. Will be created if it doesn't exist
+
+## Uncomment lines below to reuse fine-tuned model. 
+# finetune: false
+# finetuned_model_checkpoint: "rhodopsin-finetuned-with-selected-PF00001-prots/epoch_50.sav" 
+
+
+## OUTPUT LOCATION ##
+
+## output folder. Will be created if does not exist. Files may be overwritten if names clash
+output_file_identifier: "rhodopsin"  # this will be a substring in all output files produced
+sample_out_folder: "rhodopsin-samples"
+
+
+###### Section 2: GENERATION PARAMETERS ########
+
+# how many samples you want. This will be the count after the PLL filtering
+num_raygun_samples_to_generate: 20
+
+## how much pseudo log-likelihood filtering to do.
+## value=0 means no filtering, 0.9 means keep best 10% of hits by PLL
+## Raygun will actually generate <num_raygun_samples_to_generate>*(1/<filter_ratio_with_pll>) entries, storing them in a file with "unfiltered" in its name
+##  It'll then filter them by PLL and store the <num_raygun_samples_to_generate> sequences in a file with "filtered" in its name
+filter_ratio_with_pll: 0.5
+
+## target lengths: a json file containing the target length range you want for each template
+##
+##  the format of the json file is: { "<fastaid>": [minlen, maxlen], ... }
+##   here's an example: {  "sp|P00722|BGAL_ECOLI": [900, 950] }.
+##   In this case, a total of <num_raygun_samples_to_generate> will be generated across 900-950 length
+##  to specify a single target-length, you can set minlen=maxlen (e.g. [900,900])
+
+lengthinfo: "example-configs/rhodopsin/lengthinfo.json"
+
+## noiseratio is a number >= 0. At 0, minimal substitutions will be introduced. If you go over 2.25, expect >50% substitution rate
+## for most applications, we recommend noiseratio = 0.5 and randomize_noise = true 
+noiseratio: 0.5
+randomize_noise: true  # if true, the actual noise for any sample will actually be sampled from uniform(0, <noiseratio>)
+
+
+###### Section 3: OTHER PARAMETERS ########
+## you can ignore these for now
+
+finetune_epoch: 50
+finetune_save_every: 50
+finetune_lr: 0.0001
+minallowedlength: 55 # minimum length of template protein
+usereconstructionloss: true
+usereplicateloss: true
+usecrossentropyloss: true
+reconstructionlossratio: 1
+replicatelossratio: 1
+crossentropylossratio: 1
+maxlength: 1000 
+saveoptimizerstate: false
