@@ -36,7 +36,7 @@ fixed-length representation back to the variable length space of the
 user's specifications.
 
 
-## (Opinionated) Guidance on how best to use Raygun
+### (Opinionated) Guidance on how best to use Raygun
 
 The thing that Raygun seems to do well is to preserve the general structure and return a candidate that will likely fold in vitro and retain *some* functional properties. However, the more of a handle you have on predicting/optimizing function, the more useful Raygun can be for you. Raygun is very fast, so you can use it to generate lots of candidates and filter them down. We already do that as a first pass, with pseudo-loglikelihood. A good next filter might be using HMMER to prioritize well-preserved PFAM domains. If there's an additional filter you can apply (e.g., thermostability) that might help. However, be aware that many DMS datasets used for property-prediction are probably suitable more for assessing substitutions than indels. That's where having an experimental pipeline to test a few initial candidates and optimize them in the lab would help.  
 
@@ -80,9 +80,10 @@ below
 
 ### Generating samples
 
-After the raygun package has been installed, we can use it to generate
+After the raygun package has been installed, you can use it to generate
 samples using the `raygun-sample` command. This method will
-also fine-tune the model.
+also fine-tune the model. For most users, 
+`raygun-sample` should be all you need. 
 
 We strongly recommend that the user first fine-tune the model on the
 target sequence or a set of related sequences.
@@ -178,10 +179,6 @@ crossentropylossratio: 1
 maxlength: 1000 
 saveoptimizerstate: false
 ```
-
-Note that `raygun-sample` gives users the option to perform
-finetuning on the pretrained model. So, only using
-`raygun-sample` satisfies majority of end-user requirements
 
 ### Training the model
 
