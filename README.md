@@ -1,3 +1,4 @@
+![Raygun blasting a protein, shrinking its size.](logo-tiny.png)
 # Raygun: template-based protein design tool
 
 Raygun is a new approach to protein design. Unlike de novo design tools
@@ -12,9 +13,8 @@ of applications related to protein miniaturization, property optimization and so
 
 **Devkota, K., Shonai, D., Mao, J., Soderling, S. H., & Singh, R.
 (2024). Miniaturizing, Modifying, and Augmenting Nature's Proteins with
-Raygun. bioRxiv, 2024-08.**
+Raygun. bioRxiv, 2024-08.** [bioRxiv preprint](https://www.biorxiv.org/content/10.1101/2024.08.13.607858)
 
-![Raygun blasting a protein, shrinking its size.](logo-tiny.png)
 
 ## Introduction
 
@@ -42,7 +42,7 @@ The thing that Raygun seems to do well is to preserve the general structure and 
 
 ### Requirements
 
-Raygun has few package requirements: `numpy`,
+Raygun has a few package requirements: `numpy`,
 `pandas`, `fair-esm`, `pyyaml`, `h5py`, `einops` and `torch`
 (the version suitable for your GPU). We verified that our model works on
 A100 and A6000 GPUs, for the following specifications:
