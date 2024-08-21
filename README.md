@@ -99,11 +99,11 @@ We have provided YAML configuration files related to lacZ sampling in the github
 -   Quick Start: `generate-sample-lacZ-v1.yaml`
     fine-tunes on just one lacZ template sequence, and then
     generates.
--   Full Example: `generate-sample-lacZ-v1.yaml`
+-   Full Example: `generate-sample-lacZ-v2.yaml`
     fine-tunes on 20 lacZ sequences from the relevant PFAM domain,
     and then generates.
 
-Below we show `v1`
+Below we show `generate-sample-lacZ-v1.yaml`. It 
 
 ``` YAML
 ## This YAML file specifies all the parameters for using Raygun. ##
@@ -111,6 +111,7 @@ Below we show `v1`
 
 ###### Section 1: GPU, INPUT and OUTPUT Locations ########
 device: 0  # CUDA device
+
 ## template FASTA file
 templatefasta: "example-configs/lacZ/lacZ-template.fasta" 
 
@@ -243,5 +244,5 @@ Everything in this repository is licensed under the CC-BY-NC license. In additio
 
  - Employees of governmental, non-profit, or charitable institutions (including most academic researchers) are permitted to use Raygun as part of a workflow that results in commercial products or services. For example, if you are an academic who creates a molecule using Raygun and wish to commercialize it, you are welcome to do so.
 
- - For-profit organizations are allowed to use Raygun for public-domain outputs, such as publications or preprints. Additionally, these organizations are granted a 90-day trial license for internal evaluation purposes. Continued use beyond the trial period or for any commercial activities will require a separate license agreement.
+ - For-profit organizations are allowed to use Raygun for public-domain outputs, such as publications or preprints. Additionally, these organizations are granted a 60-day trial license for internal evaluation purposes. Continued use beyond the trial period or for any commercial activities will require a separate license agreement.
 
