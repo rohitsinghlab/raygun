@@ -74,7 +74,7 @@ pip install raygun
 
 ## Quick start
 
-Raygun provides users with two command-line programs, `raygun-train' and `raygun-sample`, for training the
+Raygun provides users with two command-line programs, `raygun-train` and `raygun-sample`, for training the
 model and fine-tuning/generating protein samples, respectively. These are described below
 
 ### Generating samples
