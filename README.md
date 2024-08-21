@@ -38,7 +38,7 @@ user's specifications.
 
 ### (Opinionated) Guidance on how best to use Raygun
 
-The thing that Raygun seems to do well is to preserve the general structure and return a candidate that will likely fold in vitro and retain *some* functional properties. However, the more of a handle you have on predicting/optimizing function, the more useful Raygun can be for you. This is especially the case if the starting template is an engineered protein so that its function was enhanced by previous optimization rounds. Raygun is very fast, so you can use it to generate lots of candidates and filter them down. We already do that as a first pass, with pseudo-loglikelihood. A good next filter might be using HMMER to prioritize candidates with relevant PFAM domains. If there's an additional filter you can apply (e.g., thermostability) that might help. However, be aware that many DMS datasets used for property-prediction are probably suitable more for assessing substitutions than indels. That's where having an experimental pipeline to test a few initial candidates and optimize them in the lab would help.  
+The thing that Raygun seems to do well is to preserve the general structure and return a candidate that will likely fold in vitro and retain *some* functional properties. However, the more of a handle you have on predicting/optimizing function, the more useful Raygun can be for you. This is especially the case if the starting template is an engineered protein so that its function was enhanced by previous optimization rounds. Raygun is very fast, so you can use it to generate lots of candidates and filter them down. We already do some of that, with pseudo-loglikelihood as a first pass. A good next filter might be using HMMER to prioritize candidates with relevant PFAM domains. If there're additional filters you can apply (e.g., thermostability), those might help. However, be aware that many DMS datasets used for property-prediction are probably suitable more for assessing substitutions than indels. That's where having an experimental pipeline to test a few initial candidates and optimize them in the lab would help.  
 
 ### Requirements
 
@@ -74,9 +74,8 @@ pip install raygun
 
 ## Quick start
 
-Raygun provides users with two command-line programs for training the
-model and fine-tuning/generating protein samples. These are described
-below
+Raygun provides users with two command-line programs, `raygun-train' and `raygun-sample`, for training the
+model and fine-tuning/generating protein samples, respectively. These are described below
 
 ### Generating samples
 
@@ -103,7 +102,7 @@ We have provided YAML configuration files related to lacZ sampling in the github
     fine-tunes on 20 lacZ sequences from the relevant PFAM domain,
     and then generates.
 
-Below we show `generate-sample-lacZ-v1.yaml`. It 
+Below we show `generate-sample-lacZ-v1.yaml`. Description and guidance of parameters is included in the file itself. 
 
 ``` YAML
 ## This YAML file specifies all the parameters for using Raygun. ##
