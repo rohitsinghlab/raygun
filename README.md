@@ -144,7 +144,7 @@ num_raygun_samples_to_generate: 20
 
 ## how much pseudo log-likelihood filtering to do.
 ## value=0 means no filtering, 0.9 means keep best 10% of hits by PLL
-## Raygun will actually generate <num_raygun_samples_to_generate>*(1/<filter_ratio_with_pll>) entries, storing them in a file with "unfiltered" in its name
+## Raygun will actually generate <num_raygun_samples_to_generate>/(1-<filter_ratio_with_pll>) entries, storing them in a file with "unfiltered" in its name
 ##  It'll then filter them by PLL and store the <num_raygun_samples_to_generate> sequences in a file with "filtered" in its name
 filter_ratio_with_pll: 0.5
 
