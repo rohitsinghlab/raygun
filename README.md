@@ -239,7 +239,7 @@ saveoptimizerstate: false
 
 
 ## License
-Everything in this repository is licensed under the CC-BY-NC license. In addition to the terms of this license, we grant the following rights:
+Everything in this repository is licensed under the CC-BY-NC 4.0 license. In addition to the terms of this license, we grant the following rights:
 
  - Employees of governmental, non-profit, or charitable institutions (including most academic researchers) are permitted to use Raygun as part of a workflow that results in commercial products or services. For example, if you are an academic who creates a molecule using Raygun and wish to commercialize it, you are welcome to do so.
 
