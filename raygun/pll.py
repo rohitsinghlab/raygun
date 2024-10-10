@@ -24,3 +24,23 @@ def get_PLL(seq,model,alphabet,batch_converter,reduce=np.sum,device=0):
   s=get_logits(seq,model=model,batch_converter=batch_converter,device=device)
   idx=[alphabet.tok_to_idx[i] for i in seq]
   return reduce(np.diag(s[:,idx]))
+
+
+def penalizerepeats(seq):
+    """
+    Penalize if there are AA repeats of > 3.
+    """
+    chars, counts = [seq[0]], []
+    prevchar = seq[0]
+    count = 1
+    for s in seq[1:]:
+        if prevchar != s:
+            counts.append(count)
+            prevchar = s
+            chars.append(prevchar)
+            count = 1
+        else:
+            count += 1
+    counts.append(count)
+    sc = np.sum([x for x in counts if x > 3]) / len(seq)
+    return (sc + 1/2)

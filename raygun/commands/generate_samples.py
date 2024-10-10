@@ -7,7 +7,7 @@ from raygun.model.raygun import Raygun
 from raygun.train_utils import train
 from raygun.model.esmdecoder import DecoderBlock
 from raygun.loader import RaygunData
-from raygun.pll import get_PLL
+from raygun.pll import get_PLL, penalizerepeats
 import yaml
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -63,6 +63,10 @@ class Config:
         file_handler = logging.FileHandler(f"{self.sample_out_folder}/sampling.log")
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
+        
+        # set penalizerepeats on by default
+        if not hasattr(self, "penalizerepeats"):
+            self.penalizerepeats = True
         
         if hasattr(self, "noiseratio"):
             nratio = (self.noiseratio if self.noiseratio is not None 
@@ -212,6 +216,8 @@ def main():
     config = Config(parser.parse_args().config)
     logger.info("Started the Raygun generation process")
     logger.info(f"Finetuning set to {config.finetune}. {'' if config.finetune else 'We strongly recommend to finetune the the pretrained Raygun model before using it THE FIRST TIME time for template-based protein generation. For later use, THE SAVED CHECKPOINTS can be used, setting finetune to False'}")
+    logger.info(f"Penalizerepeats set to {config.penalizerepeats}.")
+    logger.info(f"Length-agnostic PLL filtering activated. Filter ratio: {config.filter_ratio_with_pll}")
     logger.info(f"Sample fasta file: {config.templatefasta}")
     esmmodel, esmalphabet = esm.pretrained.esm2_t33_650M_UR50D()
     
@@ -304,6 +310,14 @@ def main():
         seq  = str(record.seq)
         len_ = len(seq)
         pll  = get_PLL(seq, esmmodel, esmalphabet, bc)
+        
+        # adjusted pll
+        pll  = pll / abs(-0.406 * len_ + 1.363)        
+
+        # penalized repeats
+        if config.penalizerepeats:
+            pll = pll * penalizerepeats(seq)
+        
         plldf.append((name, len_, pll, seq))
         plls[nameassignment[name]] += [(name, pll)]
     plldf = pd.DataFrame(plldf, columns = ["name", "length", "pll", "sequence"])
