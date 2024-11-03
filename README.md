@@ -17,7 +17,7 @@ Raygun. bioRxiv, 2024-08.** [bioRxiv preprint](https://www.biorxiv.org/content/1
 
 
 ## Updates
-[Nov 3 - 3:00 pm] Updating the saved model to make it accessible to cpu only systems. 
+[Nov 3 - 3:00 pm] Updating the saved model on Zenodo to make it accessible to cpu-only systems. 
 
 ## Introduction
 
