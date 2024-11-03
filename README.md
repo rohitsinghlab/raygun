@@ -16,6 +16,9 @@ of applications related to protein miniaturization, property optimization and so
 Raygun. bioRxiv, 2024-08.** [bioRxiv preprint](https://www.biorxiv.org/content/10.1101/2024.08.13.607858)
 
 
+## Updates
+[Nov 3 - 3:00 pm] Updating the saved model to make it accessible to cpu only systems. 
+
 ## Introduction
 
 Raygun is a novel protein design framework that allows for
