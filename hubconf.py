@@ -41,7 +41,8 @@ def pretrained_uniref50_95000_750M(pretrained=True, progress=True):
     
     ## OLDER version "https://zenodo.org/records/13328458/files/raygun-pretrained.sav?download=1". The new link could be loaded into CPU
     if pretrained:
-        checkpoint = torch.hub.load_state_dict_from_url(url, progress=progress)
+        checkpoint = torch.hub.load_state_dict_from_url(url, progress=progress,
+                                                       map_location = torch.device("cpu"))
         hyparams = checkpoint["model_hyperparams"]
         hyparams["esm_alphabet"] = esmtokens
         model = Raygun(dim = hyparams["dim"],
