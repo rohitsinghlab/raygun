@@ -37,7 +37,9 @@ esmtokens = {'<cls>': 0,
 
 def pretrained_uniref50_95000_750M(pretrained=True, progress=True):
     global esmtokens
-    url = "https://zenodo.org/records/13328458/files/raygun-pretrained.sav?download=1"
+    url = "https://zenodo.org/records/14031281/files/raygun-pretrained.sav?download=1"
+    
+    ## OLDER version "https://zenodo.org/records/13328458/files/raygun-pretrained.sav?download=1". The new link could be loaded into CPU
     if pretrained:
         checkpoint = torch.hub.load_state_dict_from_url(url, progress=progress)
         hyparams = checkpoint["model_hyperparams"]

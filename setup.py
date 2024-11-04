@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="raygun",
-    version="0.1.0",
+    version="0.1.2",
     author="Kapil Devkota",
     author_email="kapil.devkota@duke.edu",
     description="Protein Redesign using Raygun",

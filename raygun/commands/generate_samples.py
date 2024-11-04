@@ -224,7 +224,8 @@ def main():
     # if there is already a finetuned model, use that by setting the model URL in `finetuned_model_loc`.
     if hasattr(config, "finetuned_model_checkpoint"):
         logger.info(f"Loading the checkpoint from {config.finetuned_model_checkpoint}.")
-        checkpoint = torch.load(config.finetuned_model_checkpoint)
+        checkpoint = torch.load(config.finetuned_model_checkpoint, 
+                                map_location = torch.device(config.device))
         hyparams = checkpoint["model_hyperparams"]
         model = Raygun(dim = hyparams["dim"],
                       convkernel = hyparams["convkernel"],
