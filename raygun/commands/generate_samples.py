@@ -30,6 +30,8 @@ from collections import defaultdict
 from Bio.Align import substitution_matrices
 import shlex
 import logging
+import tempfile
+import pathlib
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -38,49 +40,102 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
+# Path to the default config
+DEFAULT_CONFIG_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
+    "example-configs", "lacZ", "generate-sample-lacZ-v1.yaml"
+)
+
 class Config:
-    def __init__(self, cfgfile):
-        with open(cfgfile, 'r') as file:
-            configdict = yaml.safe_load(file)
-        self.__dict__.update(configdict)
+    def __init__(self, args):
+        # Set default values
+        self.sample_out_folder = '.'
+        self.output_file_identifier = ""
+        self.penalizerepeats = True
+        self.filter_ratio_with_pll = 0.9
+        self.numcycles = 1
+        self.embed = None
+        self.finetune = False
+        self.finetune_save_every = 1
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.randomize_noise = False
         
+        # Load defaults from example config if it exists
+        if os.path.exists(DEFAULT_CONFIG_PATH):
+            with open(DEFAULT_CONFIG_PATH, 'r') as file:
+                default_config = yaml.safe_load(file)
+                # Only take non-path specific settings from the default config
+                for key, value in default_config.items():
+                    if key not in ['sample_out_folder', 'output_file_identifier', 'templatefasta', 'lengthinfo']:
+                        setattr(self, key, value)
+        
+        # Handle targetlength if provided
+        if args.targetlength:
+            self.lengthinfo = self._generate_length_info(args.templatefasta, args.targetlength)
+        elif args.lengthinfo:
+            self.lengthinfo = args.lengthinfo
+        
+        # Load config file if provided
+        if args.config:
+            with open(args.config, 'r') as file:
+                configdict = yaml.safe_load(file)
+                self.__dict__.update(configdict)
+        
+        # Override with command-line arguments
+        for arg, value in vars(args).items():
+            if value is not None and arg not in ['config', 'targetlength'] and hasattr(self, arg) or arg == 'templatefasta':
+                setattr(self, arg, value)
+        
+        # Validate configuration
+        self._validate_config()
+        self._setup()
+    
+    def _generate_length_info(self, template_fasta_path, target_length):
+        """Generate length info JSON from template FASTA with a single target length"""
+        if not os.path.exists(template_fasta_path):
+            raise FileNotFoundError(f"Template FASTA file not found: {template_fasta_path}")
+        
+        length_info = {}
+        for record in SeqIO.parse(template_fasta_path, "fasta"):
+            length_info[record.id] = [target_length, target_length]
+        
+        # Write to a temporary JSON file
+        temp_dir = tempfile.gettempdir()
+        length_file = os.path.join(temp_dir, f"length_info_{random.randint(10000, 99999)}.json")
+        
+        with open(length_file, 'w') as f:
+            json.dump(length_info, f)
+        
+        logger.info(f"Generated length info file at {length_file} with target length {target_length}")
+        return length_file
+    
+    def _validate_config(self):
+        """Validate that all required parameters are set"""
+        # First check all required parameters together
+        assert hasattr(self, "templatefasta"), "Template FASTA file not provided"
         assert hasattr(self, "sample_out_folder"), "Output sampling folder not provided"
-        assert hasattr(self, "output_file_identifier"), "Please provide a name to the sampling task in the `output_file_identifier` option"
-        os.makedirs(self.sample_out_folder, exist_ok = True)
+        assert hasattr(self, "output_file_identifier") is not None, "Output file identifier not provided"
+        assert hasattr(self, "lengthinfo"), "Length json file not specified"
+        assert hasattr(self, "num_raygun_samples_to_generate"), "Provide the number of raygun samples to generate"
+        
+        # Create output directory
+        os.makedirs(self.sample_out_folder, exist_ok=True)
+        
+        # Check finetune parameters if finetune is enabled
         if self.finetune:
             assert (hasattr(self, "finetune_epoch") and hasattr(self, "finetunetrain")), "number of epochs or train fasta not specified"
             assert hasattr(self, "finetuned_model_loc"), "Output finetuned model location not provided"
             assert hasattr(self, "finetune_lr"), "The finetuning learning rate not provided"
-            if not hasattr(self, "finetune_save_every"):
-                self.finetune_save_every = 1
-            os.makedirs(self.finetuned_model_loc, exist_ok = True)
+            os.makedirs(self.finetuned_model_loc, exist_ok=True)
         
-        bl = substitution_matrices.load("BLOSUM62")
-        self.blosummat = pd.DataFrame(bl, columns = list(bl.alphabet))
-        self.blosummat.index = list(bl.alphabet)
-            
-        subprocess.call(["cp", cfgfile, f"{self.sample_out_folder}/config.yaml"])
-        file_handler = logging.FileHandler(f"{self.sample_out_folder}/sampling.log")
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-        
-        # set penalizerepeats on by default
-        if not hasattr(self, "penalizerepeats"):
-            self.penalizerepeats = True
-        
-        if hasattr(self, "noiseratio"):
-            nratio = (self.noiseratio if self.noiseratio is not None 
-                      else 0)
-        else:
-            nratio = 0
-        
-        assert hasattr(self, "lengthinfo"), "Length json file not specified"
+        # Validate the length information file and its contents
         with open(f"{self.lengthinfo}", "r") as jf:
             lengthjs = json.load(jf)
-        protstosample    = set([rec.id for rec in 
-                            SeqIO.parse(self.templatefasta, "fasta")])
+        protstosample = set([rec.id for rec in SeqIO.parse(self.templatefasta, "fasta")])
         protswithleninfo = set(lengthjs.keys())
         assert len(protstosample.intersection(protswithleninfo)) == len(protstosample), "Length info not provided for all the proteins to sample"
+        
+        # Process length information
         self.minlength = {}
         self.maxlength = {}
         for k, v in lengthjs.items():
@@ -90,25 +145,37 @@ class Config:
             self.minlength[k] = lmin
             self.maxlength[k] = lmax
         
-        assert hasattr(self, "num_raygun_samples_to_generate"), "Provide the number of raygun samples to generate"
-        
-        if not hasattr(self, "filter_ratio_with_pll"):
-            self.filter_ratio_with_pll = 0.9 # filter out 90 percentage of generated candidates by default
+        # Final validations and calculations
+        assert(self.filter_ratio_with_pll < 1.0), "the ratio of pll filtering should be less than 1"
+        self.totalgenerated = int(self.num_raygun_samples_to_generate / (1 - self.filter_ratio_with_pll))
+    
+    def _setup(self):
+        """Setup logging and other initializations"""
+        if hasattr(self, "noiseratio"):
+            nratio = self.noiseratio if self.noiseratio is not None else 0
         else:
-            assert(self.filter_ratio_with_pll < 1.0), "the ratio of pll filtering should be less than 1"
-        self.totalgenerated = int(self.num_raygun_samples_to_generate / (1 - self.filter_ratio_with_pll)) 
+            self.noiseratio = 0
+            nratio = 0
         
-        if not hasattr(self, "numcycles"):
-            self.numcycles = 1
+        # Save config to output folder
+        os.makedirs(self.sample_out_folder, exist_ok=True)
+        with open(f"{self.sample_out_folder}/config.yaml", 'w') as f:
+            yaml.dump(self.__dict__, f)
         
-        # output directory for the ESM-2 embeddings
-        if not hasattr(self, "embed"):
-            self.embed = None
+        # Setup logging
+        file_handler = logging.FileHandler(f"{self.sample_out_folder}/sampling.log")
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
         
-        DECODERDIM=1280
-        DECODERNHEAD=20
-        self.decodermodel = DecoderBlock(DECODERDIM, 
-                                        DECODERNHEAD).to(self.device)
+        # Setup BLOSUM matrix
+        bl = substitution_matrices.load("BLOSUM62")
+        self.blosummat = pd.DataFrame(bl, columns=list(bl.alphabet))
+        self.blosummat.index = list(bl.alphabet)
+        
+        # Setup decoder model
+        DECODERDIM = 1280
+        DECODERNHEAD = 20
+        self.decodermodel = DecoderBlock(DECODERDIM, DECODERNHEAD).to(self.device)
     
     def update_decodermodel_weights(self, weights):
         self.decodermodel.load_state_dict(weights)
@@ -211,14 +278,57 @@ def finetune(esmmodel, esmalphabet, model,
     return model
         
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", help = "Configuration file")
-    config = Config(parser.parse_args().config)
+    parser = argparse.ArgumentParser(description="Raygun protein sequence generation")
+    
+    # Required inputs
+    parser.add_argument("--templatefasta", help="Template FASTA file (required)")
+    
+    # Either lengthinfo or targetlength is required
+    length_group = parser.add_mutually_exclusive_group()
+    length_group.add_argument("--lengthinfo", help="JSON file with length information")
+    length_group.add_argument("--targetlength", type=int, help="Target length for all sequences")
+    
+    # Optional inputs
+    parser.add_argument("--config", help="Configuration YAML file (optional)")
+    parser.add_argument("--sample_out_folder", default=".", help="Output folder for samples (default: current directory)")
+    parser.add_argument("--output_file_identifier", default="", help="Name for the sampling task (default: empty string)")
+    parser.add_argument("--device", help="Device to use (cuda or cpu)")
+    parser.add_argument("--num_raygun_samples_to_generate", type=int, help="Number of samples to generate")
+    parser.add_argument("--filter_ratio_with_pll", type=float, help="Ratio of samples to filter with PLL")
+    parser.add_argument("--noiseratio", type=float, help="Noise ratio for generation")
+    parser.add_argument("--randomize_noise", action="store_true", help="Randomize noise within noiseratio")
+    parser.add_argument("--numcycles", type=int, help="Number of cycles")
+    parser.add_argument("--penalizerepeats", type=bool, help="Whether to penalize repeated sequences")
+    
+    # Fine-tuning parameters
+    parser.add_argument("--finetune", action="store_true", help="Whether to finetune the model")
+    parser.add_argument("--finetunetrain", help="FASTA file for finetuning")
+    parser.add_argument("--finetunevalid", help="FASTA file for validation during finetuning")
+    parser.add_argument("--finetune_epoch", type=int, help="Number of epochs for finetuning")
+    parser.add_argument("--finetune_lr", type=float, help="Learning rate for finetuning")
+    parser.add_argument("--finetune_save_every", type=int, help="Save model every n epochs")
+    parser.add_argument("--finetuned_model_loc", help="Directory to save finetuned model")
+    parser.add_argument("--finetuned_model_checkpoint", help="Path to finetuned model checkpoint")
+    
+    # Embedding parameters
+    parser.add_argument("--embed", help="Directory for ESM-2 embeddings")
+    
+    args = parser.parse_args()
+    
+    # Ensure required parameters are provided
+    if not args.templatefasta:
+        parser.error("--templatefasta is required")
+    
+    if not args.lengthinfo and args.targetlength is None:
+        parser.error("Either --lengthinfo or --targetlength must be provided")
+    
+    config = Config(args)
     logger.info("Started the Raygun generation process")
     logger.info(f"Finetuning set to {config.finetune}. {'' if config.finetune else 'We strongly recommend to finetune the the pretrained Raygun model before using it THE FIRST TIME time for template-based protein generation. For later use, THE SAVED CHECKPOINTS can be used, setting finetune to False'}")
     logger.info(f"Penalizerepeats set to {config.penalizerepeats}.")
     logger.info(f"Length-agnostic PLL filtering activated. Filter ratio: {config.filter_ratio_with_pll}")
     logger.info(f"Sample fasta file: {config.templatefasta}")
+    
     esmmodel, esmalphabet = esm.pretrained.esm2_t33_650M_UR50D()
     
     # if there is already a finetuned model, use that by setting the model URL in `finetuned_model_loc`.
@@ -338,5 +448,5 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
-    
+
+
