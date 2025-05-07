@@ -54,7 +54,7 @@ class Config:
         self.penalizerepeats = True
         self.filter_ratio_with_pll = 0.9
         self.numcycles = 1
-        self.embed = None
+        self.finetune_embed = None
         self.finetune = False
         self.finetune_save_every = 1
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -248,7 +248,7 @@ def finetune(esmmodel, esmalphabet, model,
     traindata = RaygunData(esmmodel,
                         esmalphabet,
                         fastafile = trainfasta,
-                        saveembedfolder = config.embed,
+                        saveembedfolder = config.finetune_embed,
                         device = config.device,
                         config = config)
 
@@ -260,7 +260,7 @@ def finetune(esmmodel, esmalphabet, model,
         validdata = RaygunData(esmmodel,
                             esmalphabet,
                             fastafile = validfasta,
-                            saveembedfolder = config.embed,
+                            saveembedfolder = config.finetune_embed,
                             device = config.device,
                             config = config)
         validloader = DataLoader(validdata, 
@@ -287,7 +287,7 @@ def main():
     length_group = parser.add_mutually_exclusive_group()
     length_group.add_argument("--lengthinfo", help="JSON file with length information")
     length_group.add_argument("--targetlength", type=int, help="Target length for all sequences")
-    
+
     # Optional inputs
     parser.add_argument("--config", help="Configuration YAML file (optional)")
     parser.add_argument("--sample_out_folder", default=".", help="Output folder for samples (default: current directory)")
@@ -311,7 +311,7 @@ def main():
     parser.add_argument("--finetuned_model_checkpoint", help="Path to finetuned model checkpoint")
     
     # Embedding parameters
-    parser.add_argument("--embed", help="Directory for ESM-2 embeddings")
+    parser.add_argument("--finetune_embed", help="Directory for precomputed ESM-2 embeddings (for finetuning)")
     
     args = parser.parse_args()
     
