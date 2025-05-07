@@ -1,3 +1,4 @@
+# make raygun embeddings aditya parekh temporary file 
 # Copyright 2024  Kapil Devkota, Rohit Singh
 # All rights reserved
 # This code is available under the terms of the license available at https://github.com/rohitsinghlab/raygun
@@ -32,6 +33,9 @@ import shlex
 import logging
 import tempfile
 import pathlib
+
+# aditya imports
+import h5py
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -70,12 +74,21 @@ class Config:
                     if key not in ['sample_out_folder', 'output_file_identifier', 'templatefasta', 'lengthinfo']:
                         setattr(self, key, value)
         
+        # handle generation length (same as sequence)
+        self.lengthinfo = self._generate_length_info(args.templatefasta, args.targetlength)
         # Handle targetlength if provided
-        if args.targetlength:
-            self.lengthinfo = self._generate_length_info(args.templatefasta, args.targetlength)
-        elif args.lengthinfo:
-            self.lengthinfo = args.lengthinfo
-        
+        # if args.targetlength:
+        #     self.lengthinfo = self._generate_length_info(args.templatefasta, args.targetlength)
+        # elif args.lengthinfo:
+        #     self.lengthinfo = args.lengthinfo
+
+        # handle embedding output file name 
+        if len(args.embeddings) > 0:
+            assert os.path.isfile(os.path.split(args.embeddings)[0])
+            self.embed = args.embeddings
+        else:
+            self.embed = f'./raygun-embeddings_{args.output_file_identifier}.h5'
+
         # Load config file if provided
         if args.config:
             with open(args.config, 'r') as file:
@@ -236,7 +249,7 @@ def get_cycles(embedding, finallength, model, config, nratio,
                                  return_contacts = False)["representations"][33][:, 1:-1, :]
             embedcycle = model.encoder(embedcycle) # do not add noise here
             changedseq = model.shrinkwithencoder(encoder, finallength)
-    return changedseq
+    return embedcycle.detach().to('cpu').numpy()
 
 
 def finetune(esmmodel, esmalphabet, model, 
@@ -278,6 +291,7 @@ def finetune(esmmodel, esmalphabet, model,
         del validdata, validloader
     return model
         
+
 def main():
     parser = argparse.ArgumentParser(description="Raygun protein sequence generation")
     
@@ -286,8 +300,11 @@ def main():
     
     # Either lengthinfo or targetlength is required
     length_group = parser.add_mutually_exclusive_group()
-    length_group.add_argument("--lengthinfo", help="JSON file with length information")
-    length_group.add_argument("--targetlength", type=int, help="Target length for all sequences")
+    #length_group.add_argument("--lengthinfo", help="JSON file with length information")
+    length_group.add_argument("--targetlength", default=-1, type=int, help="Target length for all sequences")
+
+    # Make raygun embeddings 
+    parser.add_argument("--embeddings", default="", type=str, help="folder containing raygun embeddings (default: raygun-embeddings_<output_file_identifier>.h5)")
 
     # Optional inputs
     parser.add_argument("--config", help="Configuration YAML file (optional)")
@@ -320,8 +337,12 @@ def main():
     if not args.templatefasta:
         parser.error("--templatefasta is required")
     
-    if not args.lengthinfo and args.targetlength is None:
-        parser.error("Either --lengthinfo or --targetlength must be provided")
+    # if not args.lengthinfo and args.targetlength is None:
+    #    parser.error("Either --lengthinfo or --targetlength must be provided")
+
+    # Actually, we want the target length to be the size of the protein by default
+    if args.targetlength < 0:
+        args.targetlength = len(SeqIO.read(args.templatefasta, 'fasta').seq)
     
     config = Config(args)
     logger.info("Started the Raygun generation process")
@@ -386,7 +407,7 @@ def main():
     togenerate = config.totalgenerated
     pllaccept  = config.num_raygun_samples_to_generate
     
-    records = []
+    records = {}
     outprefix = f"{config.sample_out_folder}/unfiltered_{config.output_file_identifier}_{noiseratio}_{togenerate}"
 
     logging.info("Raygun sampling started.")
@@ -397,22 +418,29 @@ def main():
             embed = embed.unsqueeze(0)
             for h in tqdm(range(togenerate)):
                 nratio      = (noiseratio if (not config.randomize_noise) else 
-                               random.random() * noiseratio)
+                               random.random() * noiseratio) * 0
                 length      = np.random.randint(config.minlength[name], config.maxlength[name]+1)
-                changedseq = get_cycles(embed, length, model, 
-                                        config, nratio,
-                                        numcycles = config.numcycles,
-                                        esmmodel = esmmodel, esmbc = bc)
+                seq_embedding = get_cycles(embed, length, model, 
+                                           config, nratio,
+                                           numcycles = config.numcycles,
+                                           esmmodel = esmmodel, esmbc = bc)
                 genname = f"{name}_i_{h}_l_{length}_n_{nratio}"
                 nameassignment[genname] = name
-                record = SeqRecord(Seq(changedseq),
-                                   id = genname,
-                                   description = f"noise ratio added: {nratio}")
-                records.append(record)
-    SeqIO.write(records, f"{outprefix}.fasta", "fasta")
+                records[genname] = seq_embedding
+                # SeqIO.write(records, f"{outprefix}.fasta", "fasta")
+
 
     del model
     del preddata
+
+    # save embeddings
+    with h5py.File(config.embed, 'w') as f:
+        for key in records:
+            f[key] = records[key]
+
+    # exit
+    print("FLAG 269: successfully wrote embeddings, exiting!")
+    exit()
     
     # filter by pll
     plldf    = []
