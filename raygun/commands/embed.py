@@ -426,7 +426,8 @@ def main():
                                            esmmodel = esmmodel, esmbc = bc)
                 genname = f"{name}_i_{h}_l_{length}_n_{nratio}"
                 nameassignment[genname] = name
-                records[genname] = seq_embedding
+                records[name] = seq_embedding
+                break
                 # SeqIO.write(records, f"{outprefix}.fasta", "fasta")
 
 
