@@ -1,84 +1,97 @@
-# Copyright 2024  Kapil Devkota, Rohit Singh
-# All rights reserved
-# This code is available under the terms of the license available at https://github.com/rohitsinghlab/raygun
-import torch.nn as nn
 import torch
-import torch.nn.functional as F
-from einops import reduce, repeat, rearrange
-import numpy as np
-import os
-import math
-from esm.model.esm2 import TransformerLayer
-from einops.layers.torch import Rearrange
+import torch.nn as nn
+from einops import rearrange
 
-class Reduction(nn.Module):
-    def __init__(self, reduce_size = 50, dim = 1280):
-        self.reduce_size = reduce_size
-        super(Reduction, self).__init__()
-        return
-    
-    def forward(self, x, getstd = False):
+class Reduce(nn.Module):
+    """
+    Reduce variable-length sequence embedding into fixed-length representation.
+
+    Encodes a fixed number of segments of the original sequence as their average
+    values. Optionally incorporate error-scaling term to add standard deviation
+    scaled variation into embeddings for regularization and variational representation.
+    """
+    def __init__(self, num_segments=50, embed_dim=1280):
+        self.num_segments = num_segments
+        super(Reduce, self).__init__()
+
+    def forward(self, embeddings, return_std=False):
         """
-        return the sigma of noise from x, in addition to the reduction
+        Returns the reduced sequence representation and optionally the standard deviation
+        used to scale variational noise.
         """
-        batch, seqs, dim = x.shape
-        min_window_size = seqs // self.reduce_size
-        gap = seqs - min_window_size * self.reduce_size
-        gapleft = gapright = gap // 2
-        if gap % 2 == 1:
-            gapleft += 1
-        mid = self.reduce_size - gap
-        
-        firstbeg, firstend = 0, gapleft * (min_window_size + 1)
-        lastbeg, lastend   = seqs - gapright * (min_window_size + 1), seqs
-        midbeg, midend     = gapleft * (min_window_size + 1), gapleft * (min_window_size + 1) + mid * min_window_size
-        
-        xstart = x[:, firstbeg:firstend, :]
-        xmid  = x[:, midbeg:midend, :]
-        xend  = x[:, lastbeg:lastend, :]
-        
-        xstmean = self.get_mean_std(xstart, min_window_size + 1, batch, dim,
-                                               getstd, returnzero = (gapleft == 0), 
-                                               device = x.device)
-        xmidmean = self.get_mean_std(xmid, min_window_size, batch, dim,
-                                                 getstd, returnzero = False,
-                                                 device = x.device)
-        xendmean = self.get_mean_std(xend, min_window_size + 1, batch, dim,
-                                                 getstd, returnzero = (gapright == 0),
-                                                 device = x.device)
-        if getstd:
-            xstmean, xststd   = xstmean
-            xmidmean, xmidstd = xmidmean
-            xendmean, xendstd = xendmean
-            xmean = torch.concat([xstmean, xmidmean, xendmean], dim = 1)
-            xstd = torch.concat([xststd, xmidstd, xendstd], dim = 1)
-            return xmean, xstd
+        batch_size, sequence_len, _ = embeddings.shape
+
+        # calculate size of segments. normal size and gap-filling size
+        segment_size = sequence_len // self.num_segments
+        gap_segment_size = segment_size + 1
+
+        # for sequences not perfectly divisible by num_segments, make segments
+        # at beginning and end slighly larger to fill in the gap
+        gap_segments = sequence_len - segment_size * self.num_segments
+        segments_left = segments_right = gap_segments // 2
+
+        # if gap is not even, add one more segment on left
+        if gap_segments % 2 == 1:
+            segments_left += 1
+        middle_segments = self.num_segments - gap_segments
+
+        # calculate lengths of 3 groups (left and right have +1 since they fill in the gap)
+        len_left = segments_left * (gap_segment_size)
+        len_middle = middle_segments * segment_size
+        len_right = segments_right * (gap_segment_size)
+
+        # find start and end indices of the 3 groups in the whole sequence
+        left_start, left_end = 0, len_left
+        middle_start, middle_end = len_left, len_left + len_middle
+        right_start, right_end = len_left + len_middle, sequence_len
+
+        # get embeddings for 3 groups
+        left_embeddings = embeddings[:, left_start:left_end, :]
+        middle_embeddings = embeddings[:, middle_start:middle_end, :]
+        right_embeddings = embeddings[:, right_start:right_end, :]
+
+        # get mean and standard deviation representations of each segment
+        left_means, left_stds = self._calculate_mean_std(
+            left_embeddings, segments_left, return_std
+        )
+        middle_means, middle_stds = self._calculate_mean_std(
+            middle_embeddings, segments_left, return_std
+        )
+        right_means, right_stds = self._calculate_mean_std(
+            right_embeddings, segments_left, return_std
+        )
+        embedding_means = torch.concat([left_means, middle_means, right_means], dim=1)
+        embedding_stds = torch.concat([left_stds, middle_stds, right_stds], dim=1) if return_std else None
+
+        # optionally return stds
+        return (embedding_means, embedding_stds) if return_std else (embedding_means,)
+
+
+
+    def _calculate_mean_std(self, embeddings, num_segments,
+                            return_std=False):
+        """
+        Take a group of segments and extract the mean and optionally standard deviation
+        of each segment as a compressed representation.
+        """
+        device = embeddings.device
+        batch_size, _, embed_dim = embeddings.shape
+
+        # if there are no segments in the group, then just return zeros
+        if num_segments == 0:
+            zero_tensor = torch.zeros(batch_size, 0, embed_dim).to(device)
+            return (zero_tensor, zero_tensor) if return_std else (zero_tensor, None)
+
+        # separate into segments
+        embeddings_segmented = rearrange(embeddings, 'b (s l) e -> b s l e', s=num_segments)
+
+        # calculate mean per segment
+        segmented_means = torch.mean(embeddings_segmented, dim=2)
+
+        # optionally return standard deviation
+        # this can reprsent the amount of information lost in the reduction
+        if return_std:
+            segmented_stds = torch.std(embeddings_segmented, dim=2)
+            return segmented_means, segmented_stds
         else:
-            xmean = torch.concat([xstmean, xmidmean, xendmean], dim = 1)
-            return xmean
-            
-
-    def get_mean_std(self, x, windowsize, batch, dim,
-                     getstd = False, returnzero = False, 
-                     device = "cpu"):
-        if returnzero:
-            if getstd:
-                return torch.zeros(batch, 0, dim).to(device), torch.zeros(batch, 0, dim).to(x.device)
-            else:
-                return torch.zeros(batch, 0, dim).to(device)
-        xredmean = reduce(x, "b (x dx) c -> b x c", "mean",
-                          dx = windowsize)
-        if getstd:
-            xdiff = x - repeat(xredmean, "b x c -> b (x dx) c", 
-                          dx = windowsize)
-            xdiffsq = xdiff * xdiff
-            xmidstd = torch.sqrt(reduce(xdiffsq, "b (x dx) c -> b x c", "mean", 
-                                       dx = windowsize))
-            return xredmean, xmidstd
-        else:
-            return xredmean
-
-
-"""
-k * b - (k-1) * (b-p) = p
-"""
+            return segmented_means, None
