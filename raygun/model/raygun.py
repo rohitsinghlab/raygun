@@ -2,94 +2,129 @@
 # All rights reserved
 # This code is available under the terms of the license available at https://github.com/rohitsinghlab/raygun
 import torch
-import numpy as np
-import os
-import glob
-from tqdm import tqdm 
-import sys
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange, reduce
-import math
-from esm.model.esm2 import TransformerLayer
-from einops import repeat, rearrange
-from einops.layers.torch import Rearrange
+from einops import rearrange
+from einops import rearrange
+
 from raygun.model.esmdecoder import DecoderBlock
 from raygun.model.model_utils import Block
 from raygun.model.reduction import Reduction
 from raygun.model.repitition import Repitition
 
 class RaygunEncoder(nn.Module):
-    def __init__(self, dim = 1280, reduction = 50,
-                 convkernel = 7,
-                 nhead = 20, numencoders = 2, dropout = 0.2,
-                 activation = "gelu"):
+    """
+    Reduce variable-length sequence embedding into fixed-length representation.
+
+    Encodes a fixed number of segments of the original sequence as their average
+    values. Optionally incorporate error-scaling term to add standard deviation
+    scaled variation into embeddings for regularization and variational representation.
+    """
+    def __init__(self, 
+                 dim = 1280,        # dimension of input embeddings
+                 reduction = 50,    # number of segments to reduce to
+                 convkernel = 7,    # size of convolution kernel in mixing block
+                 nhead = 20,        # number of attention heads in mixing block
+                 numencoders = 2,   # number of mixing blocks
+                 dropout = 0.2,     # dropout rate (TODO: unused)
+                 activation = "gelu"): # activation function (TODO: unused)
         super(RaygunEncoder, self).__init__()
-        self.dropout = dropout
+        self.dropout = dropout # TODO: unused
         
-        block = Block
+        # using imported mixing block module
+        block_module = Block
         
+        # initialize mixing blocks
         self.encoders = nn.ModuleList()
         for i in range(numencoders):
-            self.encoders.append(block(dim = dim, 
-                                       convkernel = convkernel, 
-                                       attnheads = nhead))
+            self.encoders.append(block_module(dim = dim, 
+                                              convkernel = convkernel, 
+                                              attnheads = nhead))
             
             
-        self.redlength = reduction
-        self.reduction = Reduction(reduce_size = reduction)
+        self.redlength = reduction # store the number of reduced segments
+        self.reduction = Reduction(reduce_size = reduction) # init reduction module
+
+        # final processing layers
         self.final     = nn.Sequential(
                             nn.Linear(dim * (numencoders+1), dim // (numencoders + 1) * 4),
                             nn.SiLU(),
                             nn.Linear(dim // (numencoders + 1) * 4, dim)
                          )
         
+        # custom weight initialization for final layers
         nn.init.xavier_uniform_(self.final[0].weight, gain=1e-3)
         nn.init.xavier_uniform_(self.final[2].weight, gain=1e-3)
         nn.init.constant_(self.final[0].bias, 0)
         nn.init.constant_(self.final[2].bias, 0)
     
     def reduce(self, x, error_c = None):
+        """Applies reduction to the input, optionally adding noise."""
         if error_c is not None:
+            # reduce with noise based on standard deviation
             redmean, redstd = self.reduction(x, getstd = True)
             reduced = redmean + torch.randn_like(redstd, device = x.device) * redstd * error_c
         else:
+            # reduce without noise
             reduced = self.reduction(x, getstd = False)
         return reduced
     
-    def forward(self, x, error_c = None): 
+    def forward(self, x, error_c = None):
+        """Forward pass for RaygunEncoder"""
+        # reduce the initial input
         enc = self.reduce(x, error_c = error_c)
-        residues = [enc]
+        residues = [enc] # collect residuals from each stage
+
+        # process through encoder blocks, including residuals at each stage
         for mod in self.encoders:
             xresidue = mod(x)
             residue  = mod(self.reduction(xresidue)) 
             x        = x + xresidue
             residues.append(residue)
             
+        # final layer gets access to all residuals
         finalresidue = self.final(torch.concat(residues, dim = -1)) 
         return enc + finalresidue      
 
 class RaygunDecoder(nn.Module):
-    def __init__(self, dim = 1280, numdecoders = 5, convkernel = 7,
-                 nhead = 20, 
-                 dropout = 0.1, activation = "gelu", use_esm_block = True):
+    """
+    Expand fixed-length representation into variable-length sequence embedding.
+
+    Takes the fixed-length representations generated by RaygunEncoder and expands them
+    back into a specified sequence length. Takes the same mean values and just
+    repeats them until there are the length of the desired sequence.
+    """ 
+    def __init__(self, 
+                 dim = 1280,            # dimension of input embeddings
+                 numdecoders = 5,       # number of mixing blocks
+                 convkernel = 7,        # size of convolution kernel in mixing block
+                 nhead = 20,            # number of attention heads in mixing block
+                 dropout = 0.1,         # dropout rate (TODO: unused)
+                 activation = "gelu",   # activation function (TODO: unused)
+                 use_esm_block = True   # flag for using ESM block (TODO: unused)
+                 ):
         super(RaygunDecoder, self).__init__()
-        block = Block    
+        block_module = Block # using the imported mixing block module  
+
+        # initialize pre-repetition mixing blocks  
         self.dbefore = nn.ModuleList()
         for i in range(numdecoders):
-            self.dbefore.append(block(dim = dim,
+            self.dbefore.append(block_module(dim = dim,
                                       convkernel = convkernel,
                                       attnheads = nhead,
                                       ))
         
-        self.repitition = Repitition()
+        self.repitition = Repitition() # initialize repetition (expansion) module
         
+        # initialize post-repetition mixing blocks
         self.dafter = nn.ModuleList()
-        for i in range(numdecoders+1):
-            self.dafter.append(block(dim = dim,
+        for i in range(numdecoders+1): # one extra dafter block
+            self.dafter.append(block_module(dim = dim,
                                       convkernel = convkernel, 
                                       attnheads = nhead, 
                                       ))
+        
+        # final processing layers
         self.final = nn.Sequential(
                             nn.Linear(dim * (numdecoders+2), dim // (numdecoders+2) * 4),
                             nn.SiLU(),
@@ -97,27 +132,40 @@ class RaygunDecoder(nn.Module):
                         )
     
     def forward(self, encoding, finallength):
+        """Forward pass for the RaygunDecoder."""
+        # intitial repetition of the input encoding
         out = self.repitition(encoding, finallength)
-        # construct different encoding replicates
-        ereplicates = []
-        ereplicates.append(encoding)
+
+        # construct different encoding replicates by progressive refinement
+        ereplicates = [encoding] # start with the original encoding
         for mod in self.dbefore:
-            encoding = encoding + mod(encoding)
+            encoding = encoding + mod(encoding) # residual update
             ereplicates.append(encoding)
-        ## for each replicates, expand and apply model
-        outreplicates = [out]
+        
+        # process each replicate and collect outputs
+        outreplicates = [out] # start with initial repetition outputs
         for ereplicate, mod in zip(ereplicates, self.dafter):
             outreplicates.append(mod(self.repitition(ereplicate, finallength)))
+
+        # combine each initial output with processed replicates and final layer
         return out + self.final(torch.concat(outreplicates, dim = -1))
     
 class Raygun(nn.Module):
-    def __init__(self, dim = 1280, nhead = 20, convkernel = 7, 
-                 numencoders = 10, numdecoders = 10,
-                 dropout = 0.1,
-                 reduction = 50, activation = "gelu", use_esm_block = True,
-                 esmdecodertotokenfile = None,
-                 esm_alphabet = None):
+    def __init__(self, 
+                 dim = 1280,            # embedding dimension of input
+                 nhead = 20,            # number of attention heads for mixing blocks in encoder and decoder
+                 convkernel = 7,        # size of convolution kernel for mixing blocks in encoder and decoder
+                 numencoders = 10,      # number of encoder blocks
+                 numdecoders = 10,      # number of decoder blocks
+                 dropout = 0.1,         # dropout rate (TODO: unused in subclasses)
+                 reduction = 50,        # number of segments to reduce to/from
+                 activation = "gelu",   # activation function (TODO: unused in subclasses)
+                 use_esm_block = True,  # flag (TODO: unused)
+                 esmdecodertotokenfile = None, # path to pre-trained esm decoder checkpoint
+                 esm_alphabet = None):  # esm alphabet object for token mapping
         super(Raygun, self).__init__()
+
+        # initialize reaygun encoder and decoder
         self.encoder = RaygunEncoder(dim = dim, 
                                 reduction = reduction, 
                                 convkernel = convkernel,
@@ -132,62 +180,85 @@ class Raygun(nn.Module):
                                  dropout = dropout, 
                                  activation = activation)
         
+        # load pretrained weights for esmdecoder if provided
         self.esmdecoder = DecoderBlock(dim = dim, 
                                       nhead = 20)
+        
+        # load pretrained weights for esmdecoder if provided
         if esmdecodertotokenfile is not None:
-            checkpoint = torch.load(esmdecodertotokenfile)
+            checkpoint = torch.load(esmdecodertotokenfile, map_location='cpu') # ensure mapped to CPU first
             self.esmdecoder.load_state_dict(checkpoint["model_state"])
-            del checkpoint
+            del checkpoint # free memory
+
+        # create mapping from esm alphabet indices to tokens
         self.esmalphdict = {i:k for k, i in esm_alphabet.items()}
         
     def load_pretrained(self, chkpoint):
+        """Loads pretrained weights for the Raygun model and its ESM token decoder."""
         self.load_state_dict(chkpoint["model_state"])
         self.esmdecoder.load_state_dict(chkpoint["esmtotokensdecoder"])
         return
     
     def shrink(self, x, length, noise_c = None):
-        self.eval()
+        """Generates a sequence string of a target length from input embeddings."""
+        self.eval() 
         with torch.no_grad():
-            mem = self.encoder(x)
-            out = self.decoder(mem, length)
-            logit  = rearrange(self.compute_loss(out), "b h k -> (b h) k")
-            tokens = torch.argmax(logit, dim = -1).cpu().numpy()
-            alph   = "".join([self.esmalphdict[x] for x in tokens])
+            mem = self.encoder(x)           # encode to fixed-length representation
+            out = self.decoder(mem, length) # decode from fixed-length representation to target-length sequence
+            logit  = rearrange(self.compute_loss(out), "b h k -> (b h) k") # get logits
+            tokens = torch.argmax(logit, dim = -1).cpu().numpy()           # predict tokens
+            alph   = "".join([self.esmalphdict[x] for x in tokens])        # convert tokens to string
         return alph
     
     def shrinkwithencoder(self, encoder, length):
+        """Generates a sequence string using a pre-computed encoding."""
         self.eval()
         with torch.no_grad():
-            out = self.decoder(encoder, length)
-            logit = rearrange(self.compute_loss(out), "b h k -> (b h) k")
-            tokens = torch.argmax(logit, dim = -1).cpu().numpy()
-            alph = "".join([self.esmalphdict[x] for x in tokens])
+            out = self.decoder(encoder, length) # decode from fixed-length representation to target-lengths sequence
+            logit = rearrange(self.compute_loss(out), "b h k -> (b h) k") # get logits
+            tokens = torch.argmax(logit, dim = -1).cpu().numpy()          # predict tokens
+            alph = "".join([self.esmalphdict[x] for x in tokens])         # convert tokens to string
         return alph
     
     def compute_loss(self, out):
+        """Computes logits using the ESM decoder block (for token prediction)."""
         return self.esmdecoder(out)
     
     def decode(self, mem, newlength):
+        """Decodes fixed-length representation to a new length using the RaygunDecoder."""
         return self.decoder(mem, newlength)
     
     def get_blosum_score(self, embedding, true_token, config):
+        """Compute BLOSUM score between predicted and true sequences."""
+        self.eval()
         with torch.no_grad():
+            # convert true tokens to alphabet string
             true_alph = config.convert_tokens_to_alph(true_token.flatten().cpu().numpy())
+            # get predicted logits and tokens
             logits = self.esmdecoder(embedding)
             pred_tokens = torch.argmax(logits, dim = -1).flatten().cpu().numpy()
             pred_alph   = config.convert_tokens_to_alph(pred_tokens)
+        # compute score using method provided in config
         return config.compute_blosum_score(true_alph, pred_alph)
 
     def forward(self, x, token = None):
+        """Main forward pass for training (wiht tokens) or inference (embeddings only)"""
         batch, length, dim = x.shape
+        # encode input
         mem = self.encoder(x)
+        # decode to original length
         out = self.decoder(mem, length)
+
         if token is not None:
-            logit = rearrange(self.compute_loss(out), "b h k -> (b h) k")
-            if len(token.shape) == 3:
+            # calculate cross-entropy loss if tokens are provided (training mode)
+            logit = rearrange(self.compute_loss(out), "b h k -> (b h) k") # get logits
+
+            # prepare target tokens
+            if len(token.shape) == 3:                           # TODO: explain purpose. for one-hot? but i think this is too-simple solution?
                 tok   = rearrange(token, "b h k -> (b h k)")
-            else:
-                tok   = rearrange(token, "b k -> (b k)")
-            loss  = F.cross_entropy(logit, tok)
+            else:                                               # assuming tokens are [batch, seq_len]
+                tok   = rearrange(token, "b k -> (b k)")       
+            loss  = F.cross_entropy(logit, tok)                 # calculate loss
             return out, mem, loss
+        # inference mode (no tokens provided)
         return out, mem
