@@ -62,6 +62,7 @@ class Config:
         self.finetune_embed = None
         self.finetune = False
         self.finetune_save_every = 1
+        self.finetuned_model_checkpoint = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.randomize_noise = False
         
@@ -84,7 +85,8 @@ class Config:
 
         # handle embedding output file name 
         if len(args.embeddings) > 0:
-            assert os.path.isfile(os.path.split(args.embeddings)[0])
+            if len(os.path.split(args.embeddings)) > 1:
+                assert os.path.exists(os.path.split(args.embeddings)[0])
             self.embed = args.embeddings
         else:
             self.embed = f'./raygun-embeddings_{args.output_file_identifier}.h5'
@@ -99,7 +101,7 @@ class Config:
         for arg, value in vars(args).items():
             if value is not None and arg not in ['config', 'targetlength'] and hasattr(self, arg) or arg == 'templatefasta':
                 setattr(self, arg, value)
-        
+
         # Validate configuration
         self._validate_config()
         self._setup()
