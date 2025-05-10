@@ -58,6 +58,10 @@ class RaygunEncoder(nn.Module):
         return reduced
     
     def forward(self, x, error_c = None): 
+        ### error only at the starting reduction operation. 
+        ### need to further analyze the proper error_c value if 
+        ### we added error on succeding reduction process as 
+        ### well (Line 69)
         enc = self.reduce(x, error_c = error_c)
         residues = [enc]
         for mod in self.encoders:
