@@ -167,7 +167,7 @@ def get_cycles(embedding, finallength, model, config, nratio,
             embedcycle = esmmodel(tokens, repr_layers = [33],
                                  return_contacts = False)["representations"][33][:, 1:-1, :]
             embedcycle = model.encoder(embedcycle) # do not add noise here
-            changedseq = model.shrinkwithencoder(encoder, finallength)
+            changedseq = model.shrinkwithencoder(embedcycle, finallength)
     return changedseq
 
 
