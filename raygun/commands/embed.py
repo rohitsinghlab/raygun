@@ -269,8 +269,8 @@ def finetune(esmmodel, esmalphabet, model,
                         config = config)
 
     trainloader = DataLoader(traindata, 
-                         shuffle = True, 
-                        batch_size = 1)
+                             shuffle = True, 
+                             batch_size = 1)
 
     if (validfasta is not None) and do_validations:
         validdata = RaygunData(esmmodel,
@@ -328,7 +328,7 @@ def main():
     parser.add_argument("--finetune_lr", type=float, help="Learning rate for finetuning")
     parser.add_argument("--finetune_save_every", type=int, help="Save model every n epochs")
     parser.add_argument("--finetuned_model_loc", help="Directory to save finetuned model")
-    parser.add_argument("--finetuned_model_checkpoint", help="Path to finetuned model checkpoint")
+    parser.add_argument("--finetuned_model_checkpoint", default=None, help="Path to finetuned model checkpoint")
     
     # Embedding parameters
     parser.add_argument("--finetune_embed", help="Directory for precomputed ESM-2 embeddings (for finetuning)")
@@ -356,7 +356,7 @@ def main():
     esmmodel, esmalphabet = esm.pretrained.esm2_t33_650M_UR50D()
     
     # if there is already a finetuned model, use that by setting the model URL in `finetuned_model_loc`.
-    if hasattr(config, "finetuned_model_checkpoint"):
+    if hasattr(config, "finetuned_model_checkpoint") and config.finetuned_model_checkpoint:
         logger.info(f"Loading the checkpoint from {config.finetuned_model_checkpoint}.")
         checkpoint = torch.load(config.finetuned_model_checkpoint, 
                                 map_location = torch.device(config.device))
