@@ -31,7 +31,8 @@ setup(
         'console_scripts': [
             'raygun-train=raygun.commands.train:main',
             'raygun-sample=raygun.commands.generate_samples:main',
-            'raygun-embed=raygun.commands.embed:main'
+            'raygun-embed=raygun.commands.embed:main',
+            'raygun-finetune=raygun.commands.finetune:main'
         ],
     },
 )
