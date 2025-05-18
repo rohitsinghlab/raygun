@@ -297,18 +297,18 @@ def finetune(esmmodel, esmalphabet, model,
 def main():
     parser = argparse.ArgumentParser(description="Raygun protein sequence generation")
     
-    # Required inputs
-    parser.add_argument("--templatefasta", help="Template FASTA file (required)")
+    ### Required inputs ###
+    parser.add_argument('-t', "--templatefasta", help="Template FASTA file (required)")
     
     # Either lengthinfo or targetlength is required
     length_group = parser.add_mutually_exclusive_group()
     #length_group.add_argument("--lengthinfo", help="JSON file with length information")
-    length_group.add_argument("--targetlength", default=-1, type=int, help="Target length for all sequences")
+    length_group.add_argument('-l', "--targetlength", default=-1, type=int, help="Target length for all sequences")
 
     # Make raygun embeddings 
     parser.add_argument("--embeddings", default="", type=str, help="folder containing raygun embeddings (default: raygun-embeddings_<output_file_identifier>.h5)")
 
-    # Optional inputs
+    ### Optional inputs ###
     parser.add_argument("--config", help="Configuration YAML file (optional)")
     parser.add_argument("--sample_out_folder", default=".", help="Output folder for samples (default: current directory)")
     parser.add_argument("--output_file_identifier", default="", help="Name for the sampling task (default: empty string)")
