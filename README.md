@@ -18,6 +18,7 @@ Raygun. bioRxiv, 2024-08.** [bioRxiv preprint](https://www.biorxiv.org/content/1
 
 ## Updates
 [Nov 3 - 3:00 pm] Updating the saved model on Zenodo to make it accessible to cpu-only systems. 
+[May 20] Added Raygun version 2.
 
 ## Introduction
 
@@ -75,169 +76,151 @@ Alternately, users can install raygun from the pip repository
 pip install raygun
 ```
 
-## Quick start
+## Using Raygun
 
-Raygun provides users with two command-line programs, `raygun-train` and `raygun-sample`, for training the
+Two Raygun models are currently available for users.
+
+| model name          | Trained on         | Release date | Version  |
+|---------------------|--------------------|--------------|----------|
+| raygun_2_2mil_800M  | 2.2 mil Uniref50   | May, 2025    |   0.1    |
+| raygun_100k_750M    | 100K Uniref50      | Aug, 2024    |   0.2    |
+
+We highly recommend the latest 800M parameter model that was trained on 2.2 million randomly sampled dataset, to be used for generation and sampling.
+
+**UPDATES** 
+1. Due to the high reconstruction accuracy of this new model (> 99% average sequence identity on all of mouse and human sequences in swissprot), finetuning is no longer needed while generating the sequences.
+2. Raygun now allows larger than 1 batch sizes
+
+
+Below we demonstrate the easy usage of the new model.
+
+**Loading the model**
+```
+## loading the model
+
+from raygun.pretrained import raygun_2_2mil_800M
+raymodel = raygun_2_2mil_800M().to(0)
+```
+
+**Raygun requires ESM-2 650M embeddings**
+```
+# esm-2 model
+from esm.pretrained import esm2_t33_650M_UR50D
+esmmodel, alph = esm2_t33_650M_UR50D()
+bc             = alph.get_batch_converter()
+esmmodel       = esmmodel.to(0)
+esmmodel.eval()
+```
+
+**Get the ESM-2 embedding**
+```
+data = [("egfp", "MVSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTLTYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITLGMDELYK")]
+_, _, tok = bc(data)
+# return esmemb
+esmemb       = esmmodel(tok.to(0), repr_layers = [33],
+                        return_contacts=False)["representations"][33]
+```
+
+**Getting the Raygun outputs**
+```
+results = raymodel(emb, 
+                  return_logits_and_seqs = True)
+```
+The fixed-length representation can be obtained from the `results` dictionary by using the key `fixed_length_embedding`
+```
+results["fixed_length_embedding"].shape
+------------------------------------------------
+Output:
+torch.Size([1, 50, 1280])
+```
+
+**Change the target length with some noise**
+If the users desire to modify the template length and add some noise, two additional parameters: `target_lengths` and `error_c` should be provided as input to the Raygun model.
+```
+target_len = torch.tensor([210], dtype = int)
+error      = 0.01
+
+results    = raymodel(emb, target_lengths = target_len, error_c = error,
+                      return_logits_and_seqs = True)
+results["generated-sequences"], len(results["generated-sequences"][0])
+-------------------------------------------------
+Output:
+(['MVSKGEELFTGVVPILVELDGDVNGHKFVSGEEDTAYLKLTKFITTGKPVWPTTLTTTYGQCFRRPHHKQHFFKSAPEGYQQRTIFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYHYNSNIIMADKKKGIKKFKRHNIDGSVLDAYHQTPIGDGVLLPDHYLTQSALKNPEKRDHMVLLEFVTAAGITLGMEEYYK'],
+ 210)
+```
+
+More examples on batching/usage of dataloaders to streamline the generation/training operation are provided in the ipynb files in the notebook folder.
+
+## Training and sampling APIs
+
+We also additionally provide two command-line programs, `raygun-train` and `raygun-sample-single`, for training the
 model and fine-tuning/generating protein samples, respectively. These are described below
 
 ### Generating samples
 
 After the raygun package has been installed, you can use it to generate
-samples using the `raygun-sample` command. This method will
+samples using the `raygun-sample-single` command. This method will
 also fine-tune the model. For most users, 
-`raygun-sample` should be all you need. 
+`raygun-sample-single` should be all you need.
 
-We strongly recommend that the user first fine-tune the model on the
-target sequence or a set of related sequences.
+~~We strongly recommend that the user first fine-tune the model on the
+target sequence or a set of related sequences.~~
 
-`raygun-sample` can be invoked in bash in the following way:
+**Update**
+Unlike Version 1, the latest model does not require finetuning. 
+
+
+`raygun-sample-single` accepts a FASTA file with only one sequence record (if more than one records provided, it only takes the first entry). The program can be invoked the following way:
 
 ``` bash
-raygun-sample --config <YAML configuration file>
+raygun-sample --minlength <minlength> --maxlength <maxlength> --noiseratio <error>  \
+              --num_raygun_samples_to_generate 50 --sample_ratio 10 --randomize_noise \
+              --device 0 --penalizerepeats <template-fasta-file> <output-folder>
 ```
+Here, `template-fasta-file`, `output-folder`, `--minlength` and `--maxlength` are required arguments. 
+The sampling process internally uses PLL based filtering to select for the most sequentially viable candidates. 
+`--num_raygun_samples_to_generate` tells the program the number of sequences to be outputted after PLL filtering.
+`--sample-ratio` refers to the total number of sequences for Raygun to generate before the filtering operation. A sample
+ratio of 10 implies that 500 sequences has to be generated to finally return 50 filtered candidates as output.
 
-We have provided YAML configuration files related to lacZ sampling in the github repository folder `example-configs/lacZ`:
-
--   Quick Start: `generate-sample-lacZ-v1.yaml`
-    fine-tunes on just one lacZ template sequence, and then
-    generates.
--   Full Example: `generate-sample-lacZ-v2.yaml`
-    fine-tunes on 20 lacZ sequences from the relevant PFAM domain,
-    and then generates.
-
-Below we show `generate-sample-lacZ-v1.yaml`. Description and guidance of parameters is included in the file itself. 
-
-``` YAML
-## This YAML file specifies all the parameters for using Raygun. ##
-##  At start, we suggest focusing only on parameters in Sections 1 and 2.  
-
-###### Section 1: GPU, INPUT and OUTPUT Locations ########
-device: 0  # CUDA device
-
-## template FASTA file
-templatefasta: "example-configs/lacZ/lacZ-template.fasta" 
-
-
-## FINE-TUNING ##
-
-## We strongly recommend starting from our pre-trained
-## model and fine-tune it for your sequences.
-
-## First time fine-tuning (or to overwrite previous fine-tune). Comment these lines if reusing fine-tuned model. 
-finetune: true  # will overwrite the existing models in model folder if it exists
-finetunetrain: "example-configs/lacZ/lacZ-template.fasta" # a single fasta file containing 1 or more sequences you want to fine-tune the decoder on
-finetuned_model_loc: "lacZ-finetuned"  # folder where models are saved. Will be created if it doesn't exist
-
-## Uncomment lines below to reuse fine-tuned model. 
-# finetune: false
-# finetuned_model_checkpoint: "lacZ-model/epoch_50.sav" 
-
-
-## OUTPUT LOCATION ##
-
-## output folder. Will be created if does not exist. Files may be overwritten if names clash
-output_file_identifier: "lacZ"  # this will be a substring in all output files produced
-sample_out_folder: "lacZ-samples"
-
-
-###### Section 2: GENERATION PARAMETERS ########
-
-# how many samples you want. This will be the count after the PLL filtering
-num_raygun_samples_to_generate: 20
-
-## how much pseudo log-likelihood filtering to do.
-## value=0 means no filtering, 0.9 means keep best 10% of hits by PLL
-## Raygun will actually generate <num_raygun_samples_to_generate>/(1-<filter_ratio_with_pll>) entries, storing them in a file with "unfiltered" in its name
-##  It'll then filter them by PLL and store the <num_raygun_samples_to_generate> sequences in a file with "filtered" in its name
-filter_ratio_with_pll: 0.5
-
-## target lengths: a json file containing the target length range you want for each template
-##
-##  the format of the json file is: { "<fastaid>": [minlen, maxlen], ... }
-##   here's an example: {  "sp|P00722|BGAL_ECOLI": [900, 950] }.
-##   In this case, a total of <num_raygun_samples_to_generate> will be generated across 900-950 length
-##  to specify a single target-length, you can set minlen=maxlen (e.g. [900,900])
-
-lengthinfo: "example-configs/lacZ/leninfo-lacZ.json"
-
-## noiseratio is a number >= 0. At 0, minimal substitutions will be introduced. If you go over 2.25, expect >50% substitution rate
-## for most applications, we recommend noiseratio = 0.5 and randomize_noise = true 
-noiseratio: 0.5
-randomize_noise: true  # if true, the actual noise for any sample will actually be sampled from uniform(0, <noiseratio>)
-
-
-###### Section 3: OTHER PARAMETERS ########
-## you can ignore these for now
-
-finetune_epoch: 50
-finetune_save_every: 50
-finetune_lr: 0.0001
-minallowedlength: 55 # minimum length of template protein
-usereconstructionloss: true
-usereplicateloss: true
-usecrossentropyloss: true
-reconstructionlossratio: 1
-replicatelossratio: 1
-crossentropylossratio: 1
-maxlength: 1000 
-saveoptimizerstate: false
-```
 
 ### Training the model
 
-If the goal is to pre-train the model from scratch, we suggest using the
-`raygun-train` command. It can be invoked as:
+The new version of `raygun-train` is relies on the Lightning framework for multi-gpu training. The python file that implements 
+this API is found in the `raygun/commands` folder.
 
+We use Hydra YAML framework to supply input. The base config file is provided in the `example_configs/version2` folder.
+
+We can invoke the train command in bash the following way
 ``` bash
-raygun-train --config <YAML configuration file>
+raygun-train --config-path example_configs/version2 devices=<no_devices> \ 
+                           model_saveloc=<saveloc> trainfasta=<tfastafile> validfasta=<vfastafile> 
 ```
 
-We also provide the configuration file for training the lacZ-train model
-in the `example-configs/lacZ` folder.
-
+The configuration file `example_configs/version2/train.yaml` has additional parameters tha can be modified.
 ``` YAML
-## This YAML file specifies all the parameters for finetuning Raygun, or training it from scratch ##
-##  At start, we suggest focusing only on parameters in Sections 1 and 2.  
-###### Section 1: GPU, INPUT and OUTPUT Locations ########
-# your cuda device. If you only have one, 0 is likely the default
-device: 0
+devices: null           #required
+model_saveloc: null     #required
+trainfasta: null        #required
+validfasta: null        #required
+epoch: 10
+num_to_save: 3
+lr: 0.00002
 
-## INPUT ##
-
-# the input sequence(s) for training or finetuning. Requires the training fasta file. If the validation fasta not specified, the training epoch will not perform the validation step
-trainfasta: "example-configs/lacZ/lacZ-selected-family.fasta"
-# validfasta: "example-configs/lacZ/lacZ-selected-family.fasta"
-
-# embedding location. If specified, the ESM-2 outputs will be saved at this location. If set to null, the embeddings are not saved
-esm2_embedding_saveloc: null
-
-# folder where the output model is to be saved. REQUIRED
-output_model_loc: "lacZ-trained"
-# if the `checkpoint` is specified, the training/finetuning will begin from this checkpoint. If not provided, the program will use the pretrain model
-# checkpoint: "bgal-model/epoch_5.sav"
-
-# Set this to true if the goal is finetuning. Finetuning freezes the encoder parameters only updating the Raygun decoder
-# For training from scratch, set `finetune: false`. Default: false
-finetune: false
-
-## Total number of epochs to train/finetune, and the learning rate
-epoch: 50
-lr: 0.0001
-# Default: 1, model is saved at every multiples of this parameter
-save_every: 50
+esm2_embedding_saveloc: null # if specified, the ESM-2 embeddings will be saved here.
 
 ###### Section 3: OTHER PARAMETERS ########
 ## you can ignore these for now
-usereconstructionloss: true
-usereplicateloss: true
-usecrossentropyloss: true
 reconstructionlossratio: 1
 replicatelossratio: 1
 crossentropylossratio: 1
-maxlength: 1000
+maxlength: 1500
 minallowedlength: 55
 clip: 0.0001
-saveoptimizerstate: false
+batch_size: 2
+accumulate_grad_batches: 1
+
+log_wandb: false
 ```
 
 

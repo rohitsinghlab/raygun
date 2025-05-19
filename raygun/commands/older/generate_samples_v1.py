@@ -6,7 +6,7 @@ import sys
 from raygun.model.raygun import Raygun
 from raygun.train_utils import train
 from raygun.model.esmdecoder import DecoderBlock
-from raygun.loader import RaygunData
+from raygun.model.loader import RaygunData
 from raygun.pll import get_PLL, penalizerepeats
 import yaml
 from torch.utils.data import DataLoader
