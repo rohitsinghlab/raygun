@@ -90,7 +90,9 @@ Two Raygun models are currently available for users.
 
 We highly recommend the latest 800M parameter model that was trained on 2.2 million randomly sampled dataset to be used for generation and sampling.
 
-Below we demonstrate the easy usage of the new model.
+Here is how you would obtain fixed-length embeddings and generate new sample(s) programmatically. Later, we also describe how to do this via the command line. 
+
+### Programmatically
 
 **1. Load the Raygun model**
 ```
@@ -120,12 +122,14 @@ esmemb       = esmmodel(tok.to(0), repr_layers = [33],
                         return_contacts=False)["representations"][33]
 ```
 
-**4. Get the Raygun output (reconstruction mode: same length, zero noise)**
+**4.1 Generation: reconstruct the sequence i.e. the same length with zero noise)**
 ```
 # this is for batchsize=1; see the notebooks for batchsize > 1 (e.g., a mask will be needed if batch sequences are of varying lengths).
 results = raymodel(esmemb, 
                   return_logits_and_seqs = True)
 ```
+
+**4.1.1 Obtaining the fixed-length representation** 
 The fixed-length representation can be obtained from the `results` dictionary by using the key `fixed_length_embedding`
 ```
 results["fixed_length_embedding"].shape
@@ -134,7 +138,7 @@ Output:
 torch.Size([1, 50, 1280])
 ```
 
-**4. Generate with indels and substitutions, i.e., change the target length and add some noise**
+**4.2 Generate with indels and substitutions, i.e., change the target length and add some noise**
 If the users desire to modify the template length and add some noise, two additional parameters: `target_lengths` and `error_c` should be provided as input to the Raygun model.
 ```
 target_len = torch.tensor([210], dtype = int)
