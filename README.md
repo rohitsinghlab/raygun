@@ -17,9 +17,12 @@ Raygun. bioRxiv, 2024-08.** [bioRxiv preprint](https://www.biorxiv.org/content/1
 
 
 ## Updates
-[Nov 3 - 3:00 pm] Updating the saved model on Zenodo to make it accessible to cpu-only systems. 
-[May 20] Added Raygun version 2.
+**[Nov 3 - 3:00 pm] Updating the saved model on Zenodo to make it accessible to cpu-only systems.** 
 
+**[May 20] Added Raygun version 0.2.**
+  1. Due to the high reconstruction accuracy of this new model (> 99% average sequence identity on all of mouse and human sequences in swissprot), finetuning is no longer needed while generating the sequences.
+  2. Raygun now allows for batch sizes greater than 1.
+   
 ## Introduction
 
 Raygun is a novel protein design framework that allows for
@@ -82,15 +85,10 @@ Two Raygun models are currently available for users.
 
 | model name          | Trained on         | Release date | Version  |
 |---------------------|--------------------|--------------|----------|
-| raygun_2_2mil_800M  | 2.2 mil Uniref50   | May, 2025    |   0.1    |
-| raygun_100k_750M    | 100K Uniref50      | Aug, 2024    |   0.2    |
+| raygun_2_2mil_800M  | 2.2 mil Uniref50   | May, 2025    |   0.2    |
+| raygun_100k_750M    | 100K Uniref50      | Aug, 2024    |   0.1    |
 
-We highly recommend the latest 800M parameter model that was trained on 2.2 million randomly sampled dataset, to be used for generation and sampling.
-
-**UPDATES** 
-1. Due to the high reconstruction accuracy of this new model (> 99% average sequence identity on all of mouse and human sequences in swissprot), finetuning is no longer needed while generating the sequences.
-2. Raygun now allows larger than 1 batch sizes
-
+We highly recommend the latest 800M parameter model that was trained on 2.2 million randomly sampled dataset to be used for generation and sampling.
 
 Below we demonstrate the easy usage of the new model.
 
@@ -159,8 +157,7 @@ model and fine-tuning/generating protein samples, respectively. These are descri
 ### Generating samples
 
 After the raygun package has been installed, you can use it to generate
-samples using the `raygun-sample-single` command. This method will
-also fine-tune the model. For most users, 
+samples using the `raygun-sample-single` command.  For most users, 
 `raygun-sample-single` should be all you need.
 
 ~~We strongly recommend that the user first fine-tune the model on the
@@ -197,7 +194,7 @@ raygun-train --config-path example_configs/version2 devices=<no_devices> \
                            model_saveloc=<saveloc> trainfasta=<tfastafile> validfasta=<vfastafile> 
 ```
 
-The configuration file `example_configs/version2/train.yaml` has additional parameters tha can be modified.
+The configuration file `example_configs/version2/train.yaml` has additional parameters that can be modified.
 ``` YAML
 devices: null           #required
 model_saveloc: null     #required
