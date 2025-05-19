@@ -120,6 +120,7 @@ _, _, tok = bc(data)
 # return esmemb
 esmemb       = esmmodel(tok.to(0), repr_layers = [33],
                         return_contacts=False)["representations"][33]
+# esmemb.shape should be torch.Size([1, 241, 1280])
 ```
 
 **4.1 Generation: reconstruct the sequence i.e. the same length with zero noise)**
