@@ -20,7 +20,7 @@ Raygun. bioRxiv, 2024-08.** [bioRxiv preprint](https://www.biorxiv.org/content/1
 **[Nov 3 - 3:00 pm] Updating the saved model on Zenodo to make it accessible to cpu-only systems.** 
 
 **[May 20] Added Raygun version 0.2.**
-  1. Due to the high reconstruction accuracy of this new model (> 99% average sequence identity on all of mouse and human sequences in swissprot), finetuning is no longer needed while generating the sequences.
+  1. Due to the higher reconstruction accuracy of this new model (> 99% sequence recapitulation on all mouse and human sequences in SwissProt), we now recommend zero-shot usage of Raygun i.e., finetuning is unnecessary in most cases.
   2. Raygun now allows for batch sizes greater than 1.
    
 ## Introduction
@@ -33,7 +33,7 @@ full control over the lengths of the generated sequences.
 
 **How to use Raygun:** Input a protein sequence, specify a target length
 and a noise parameter. Raygun will use those information to efficiently
-generate samples (< 1 sec/sample on a GPU). The users have absolute
+generate samples (< 1 sec/sample on a GPU). The users have complete
 control over the length of the target protein.
 
 **How Raygun works** Raygun is an autoencoder-based design which
