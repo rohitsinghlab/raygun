@@ -182,8 +182,7 @@ Unlike Version 1, the latest model does not require finetuning.
 
 ``` bash
 raygun-sample-single --minlength <minlength> --maxlength <maxlength> --noiseratio <error>  \
-              --num_raygun_samples_to_generate 50 --sample_ratio 10 --randomize_noise \
-              --device 0 --penalizerepeats <template-fasta-file> <output-folder>
+              --num_raygun_samples_to_generate 50 <template-fasta-file> <output-folder>
 ```
 Here, `template-fasta-file`, `output-folder`, `--minlength` and `--maxlength` are required arguments. 
 The sampling process internally uses PLL based filtering to select for the most sequentially viable candidates. 
