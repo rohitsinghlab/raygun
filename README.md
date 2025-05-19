@@ -76,7 +76,7 @@ pip install . #note that the code will be copied to the environment's packages d
 Alternately, users can install raygun from the pip repository
 
 ``` bash
-pip install raygun
+pip install git+https://github.com/rohitsinghlab/raygun.git
 ```
 
 ## Using Raygun
