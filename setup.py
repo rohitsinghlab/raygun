@@ -25,7 +25,9 @@ setup(
         "biopython",
         "h5py",
         "einops",
-        "pyyaml"
+        "pyyaml",
+        "hydra-core",
+        "lightning"
     ],
     entry_points={
         'console_scripts': [
