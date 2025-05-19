@@ -92,7 +92,7 @@ We highly recommend the latest 800M parameter model that was trained on 2.2 mill
 
 Below we demonstrate the easy usage of the new model.
 
-**Loading the model**
+**1. Load the Raygun model**
 ```
 ## loading the model
 
@@ -100,7 +100,7 @@ from raygun.pretrained import raygun_2_2mil_800M
 raymodel = raygun_2_2mil_800M().to(0)
 ```
 
-**Raygun requires ESM-2 650M embeddings**
+**2. Also load the ESM-2 650M model (Raygun accepts as input ESM-2 650M embeddings)**
 ```
 # esm-2 model
 from esm.pretrained import esm2_t33_650M_UR50D
@@ -110,8 +110,9 @@ esmmodel       = esmmodel.to(0)
 esmmodel.eval()
 ```
 
-**Get the ESM-2 embedding**
+**3. Get the ESM-2 embedding of the input sequence**
 ```
+# data is a list of (id,sequence) pairs
 data = [("egfp", "MVSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTLTYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITLGMDELYK")]
 _, _, tok = bc(data)
 # return esmemb
@@ -119,9 +120,10 @@ esmemb       = esmmodel(tok.to(0), repr_layers = [33],
                         return_contacts=False)["representations"][33]
 ```
 
-**Getting the Raygun outputs**
+**4. Get the Raygun output (reconstruction mode: same length, zero noise)**
 ```
-results = raymodel(emb, 
+# this is for batchsize=1; see the notebooks for batchsize > 1 (e.g., a mask will be needed if batch sequences are of varying lengths).
+results = raymodel(esmemb, 
                   return_logits_and_seqs = True)
 ```
 The fixed-length representation can be obtained from the `results` dictionary by using the key `fixed_length_embedding`
@@ -132,11 +134,11 @@ Output:
 torch.Size([1, 50, 1280])
 ```
 
-**Change the target length with some noise**
+**4. Generate with indels and substitutions, i.e., change the target length and add some noise**
 If the users desire to modify the template length and add some noise, two additional parameters: `target_lengths` and `error_c` should be provided as input to the Raygun model.
 ```
 target_len = torch.tensor([210], dtype = int)
-error      = 0.01
+error      = 0.1 # we recommend noise between 0 and 0.5, larger values provide more sequence diversity
 
 results    = raymodel(emb, target_lengths = target_len, error_c = error,
                       return_logits_and_seqs = True)
