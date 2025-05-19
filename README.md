@@ -96,6 +96,8 @@ Here is how you would obtain fixed-length embeddings and generate new sample(s) 
 
 **1. Load the Raygun model**
 ```
+## set the seeds to ensure repeatability
+
 ## loading the model
 
 from raygun.pretrained import raygun_2_2mil_800M
@@ -134,8 +136,9 @@ results = raymodel(esmemb,
 The fixed-length representation can be obtained from the `results` dictionary by using the key `fixed_length_embedding`
 ```
 results["fixed_length_embedding"].shape
-------------------------------------------------
-Output:
+```
+Expected Output:
+```
 torch.Size([1, 50, 1280])
 ```
 
@@ -145,11 +148,12 @@ If the users desire to modify the template length and add some noise, two additi
 target_len = torch.tensor([210], dtype = int)
 error      = 0.1 # we recommend noise between 0 and 0.5, larger values provide more sequence diversity
 
-results    = raymodel(emb, target_lengths = target_len, error_c = error,
+results    = raymodel(esmemb, target_lengths = target_len, error_c = error,
                       return_logits_and_seqs = True)
 results["generated-sequences"], len(results["generated-sequences"][0])
--------------------------------------------------
-Output:
+```
+Expected Output (your sequence may vary a bit, due to noise):
+```
 (['MVSKGEELFTGVVPILVELDGDVNGHKFVSGEEDTAYLKLTKFITTGKPVWPTTLTTTYGQCFRRPHHKQHFFKSAPEGYQQRTIFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYHYNSNIIMADKKKGIKKFKRHNIDGSVLDAYHQTPIGDGVLLPDHYLTQSALKNPEKRDHMVLLEFVTAAGITLGMEEYYK'],
  210)
 ```
@@ -177,7 +181,7 @@ Unlike Version 1, the latest model does not require finetuning.
 `raygun-sample-single` accepts a FASTA file with only one sequence record (if more than one records provided, it only takes the first entry). The program can be invoked the following way:
 
 ``` bash
-raygun-sample --minlength <minlength> --maxlength <maxlength> --noiseratio <error>  \
+raygun-sample-single --minlength <minlength> --maxlength <maxlength> --noiseratio <error>  \
               --num_raygun_samples_to_generate 50 --sample_ratio 10 --randomize_noise \
               --device 0 --penalizerepeats <template-fasta-file> <output-folder>
 ```
