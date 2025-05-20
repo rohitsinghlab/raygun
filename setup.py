@@ -31,7 +31,6 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'raygun-train=raygun.commands.train:main',
             'raygun-sample-single=raygun.commands.generate_samples_single:main',
             'raygun-sample-multiple=raygun.commands.generate_samples_multiple:main'
         ],
