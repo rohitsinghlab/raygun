@@ -9,6 +9,7 @@ proteins significantly retained structural and functional properties of
 the original template protein. We anticipate Raygun to be valuable in a variety 
 of applications related to protein miniaturization, property optimization and so on.
 
+
 -----
 
 ## Table of Contents
@@ -181,9 +182,9 @@ torch.Size([1, 50, 1280])
 If the users desire to modify the template length and add some noise, two additional parameters: `target_lengths` and `error_c` should be provided as input to the Raygun model.
 ```
 target_len = torch.tensor([210], dtype = int)
-error      = 0.1 # we recommend noise between 0 and 0.5, larger values provide more sequence diversity
+noise      = 0.1 # we recommend noise between 0 and 0.5, larger values provide more sequence diversity
 
-results    = raymodel(esmemb, target_lengths = target_len, error_c = error,
+results    = raymodel(esmemb, target_lengths = target_len, noise = noise,
                       return_logits_and_seqs = True)
 results["generated-sequences"], len(results["generated-sequences"][0])
 ```
@@ -209,8 +210,7 @@ samples using the `raygun-sample-single` command.  For most users,
 target sequence or a set of related sequences.~~
 
 **Update**
-Unlike Version 1, the latest model only requires finetuning on rare cases where the sequence identity of the pretrained v0.2 model is < 0.90 (in contrast, the median sequence identity observed on all of Swissprot Human and Mouse sequences were ~0.96)
-
+Unlike Raygun v0.1, fine-tuning the new v0.2 model should be necessary only in the rare cases where the sequence identity of the zero-shot reconstructed sequence is < 0.90 (see fine-tuning instructions later in this section). For context, with the v0.2 model, the median sequence identity observed when reconstructing Swissprot Human and Mouse sequences is ~0.96, and in some domains such as PF01353 (fluorescent proteins), the zero-shot reconstruction results in > 0.99 identity. 
 
 `raygun-sample-single` accepts a FASTA file with only one sequence record (if more than one records provided, it only takes the first entry). The program can be invoked the following way:
 
@@ -222,7 +222,7 @@ Here, `template-fasta-file`, `output-folder`, `--minlength` and `--maxlength` ar
 The sampling process internally uses PLL based filtering to select for the most sequentially viable candidates. 
 `--num_raygun_samples_to_generate` tells the program the number of sequences to be outputted after PLL filtering.
 `--sample-ratio` refers to the total number of sequences for Raygun to generate before the filtering operation. A sample
-ratio of 10 implies that 500 sequences has to be generated to finally return 50 filtered candidates as output.
+ratio of 10 implies that 500 sequences are generated internally to finally return 50 filtered candidates as output.
 
 `raygun-sample-multiple` lets user accept FASTA files with more than one entries. The modification here is that the users should provide length information of these records in a JSON file format, of the form
 ```
