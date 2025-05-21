@@ -46,7 +46,7 @@ Raygun. bioRxiv, 2024-08.** [bioRxiv preprint](https://www.biorxiv.org/content/1
 **[Nov 3 - 3:00 pm] Updating the saved model on Zenodo to make it accessible to cpu-only systems.** 
 
 **[May 20] Added Raygun version 0.2.**
-  1. Due to the higher reconstruction accuracy of this new model (~92% sequence recapitulation on all mouse and human sequences in SwissProt), we now recommend zero-shot usage of Raygun i.e., finetuning is unnecessary in most cases.
+  1. Due to the higher reconstruction accuracy of this new model (~96% median sequence recapitulation on all mouse and human sequences in SwissProt), we now recommend zero-shot usage of Raygun i.e., finetuning is unnecessary in most cases.
   2. Raygun now allows for batch sizes greater than 1.
 
 -----
