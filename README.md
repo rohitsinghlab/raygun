@@ -209,7 +209,7 @@ samples using the `raygun-sample-single` command.  For most users,
 target sequence or a set of related sequences.~~
 
 **Update**
-Unlike Version 1, the latest model does not require finetuning. 
+Unlike Version 1, the latest model only requires finetuning on rare cases where the sequence identity of the pretrained v0.2 model is < 0.90 (in contrast, the median sequence identity observed on all of Swissprot Human and Mouse sequences were ~0.96)
 
 
 `raygun-sample-single` accepts a FASTA file with only one sequence record (if more than one records provided, it only takes the first entry). The program can be invoked the following way:
@@ -234,6 +234,8 @@ One can invoke `raygun-sample-multiple` the following way
 ```
 raygun-sample-single --leninfo <Length json file>  <template-fasta-file> <output-folder>
 ```
+
+In addition, if the rare case that the off-the-shelf sequence reconstruction of the template was poor, both `raygun-sample-single` and `raygun-sample-multiple` allows finetuning by setting up the `--finetuning` option. For detailed instructions, please look at the `example_sh` folder for working examples. 
 
 ### Training the model
 
