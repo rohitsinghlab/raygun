@@ -14,10 +14,10 @@ import math
 from esm.model.esm2 import TransformerLayer
 from einops import repeat, rearrange
 from einops.layers.torch import Rearrange
-from raygun.model.esmdecoder import DecoderBlock
-from raygun.model.model_utils import Block
-from raygun.model.reduction import Reduction
-from raygun.model.repitition import Repitition
+from raygun.old_modelv1.esmdecoder import DecoderBlock
+from raygun.old_modelv1.model_utils import Block
+from raygun.old_modelv1.reduction import Reduction
+from raygun.old_modelv1.repitition import Repitition
 
 class RaygunEncoder(nn.Module):
     def __init__(self, dim = 1280, reduction = 50,

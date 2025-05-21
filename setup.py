@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="raygun",
-    version="0.1.2",
+    version="0.2.1",
     author="Kapil Devkota",
     author_email="kapil.devkota@duke.edu",
     description="Protein Redesign using Raygun",
@@ -25,12 +25,15 @@ setup(
         "biopython",
         "h5py",
         "einops",
-        "pyyaml"
+        "pyyaml",
+        "hydra-core",
+        "lightning",
+        "typer"
     ],
     entry_points={
         'console_scripts': [
-            'raygun-train=raygun.commands.train:main',
-            'raygun-sample=raygun.commands.generate_samples:main'
+            'raygun-sample-single=raygun.commands.generate_samples_single:main',
+            'raygun-sample-multiple=raygun.commands.generate_samples_multiple:main'
         ],
     },
 )

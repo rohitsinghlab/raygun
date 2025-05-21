@@ -1,0 +1,22 @@
+devices: null           #required
+model_saveloc: null     #required
+trainfasta: null        #required
+validfasta: null        #required
+epoch: 10
+num_to_save: 3
+lr: 0.00002
+
+esm2_embedding_saveloc: null
+
+###### Section 3: OTHER PARAMETERS ########
+## you can ignore these for now
+reconstructionlossratio: 1
+replicatelossratio: 1
+crossentropylossratio: 1
+maxlength: 1500
+minallowedlength: 55
+clip: 0.0001
+batch_size: 2
+accumulate_grad_batches: 1
+
+log_wandb: false
