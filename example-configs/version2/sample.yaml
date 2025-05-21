@@ -1,0 +1,12 @@
+templatefasta: null
+lengthinfo: null
+sample_out_folder: null
+
+noiseratio: 1
+num_raygun_samples_to_generate: 50
+sample_ratio: 10
+
+device: 0
+randomize_noise: true
+numcycles: 1
+penalizerepeats: true

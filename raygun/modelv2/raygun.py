@@ -47,28 +47,28 @@ class RaygunEncoder(nn.Module):
         nn.init.constant_(self.final[0].bias, 0)
         nn.init.constant_(self.final[2].bias, 0)
 
-    def reduce(self, x, mask = None, error_c = None):
+    def reduce(self, x, mask = None, noise = None):
         """
         Use the Reduction operation to compress the PLM representation to a fixed-dimension space.
         """
         batch, _, _ = x.shape
-        if error_c is not None:
+        if noise is not None:
             redmean, redstd = self.reduction(x, mask = mask, getstd = True)
-            reduced = redmean + torch.randn_like(redstd, device = x.device) * redstd * error_c
+            reduced = redmean + torch.randn_like(redstd, device = x.device) * redstd * noise
         else:
             reduced = self.reduction(x, mask = mask, getstd = False)
         return reduced
 
-    def forward(self, x, mask = None, error_c = None):
+    def forward(self, x, mask = None, noise = None):
         """
         If error_c is provided, noise component is incorporated into the 
         fixed-dimensional representation. 
         """
-        enc = self.reduce(x, mask = mask, error_c = error_c)
+        enc = self.reduce(x, mask = mask, noise = noise)
         residues = [enc]
         for mod in self.encoders:
             xresidue = mod(x, mask = mask)
-            residue  = mod(self.reduce(xresidue, mask = mask, error_c = error_c)) # 
+            residue  = mod(self.reduce(xresidue, mask = mask, noise = noise)) # 
             x        = x + xresidue
             residues.append(residue)
 
@@ -176,7 +176,7 @@ class Raygun(nn.Module):
     
     def forward(self, x, mask = None, 
                 target_lengths = None, 
-                error_c = None, 
+                noise = None, 
                 token = None, 
                 return_logits_and_seqs = False):
         """
@@ -194,7 +194,7 @@ class Raygun(nn.Module):
         else:
             assert mask is not None, "batch larger than 1 but mask is Null"
             lengths = mask.sum(dim = -1)
-        mem = self.encoder(x, mask = mask, error_c = error_c)
+        mem = self.encoder(x, mask = mask, noise = noise)
         out = self.decoder(mem, lengths)
         
         result = {"fixed_length_embedding": mem, 

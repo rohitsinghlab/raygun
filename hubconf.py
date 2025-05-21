@@ -1,5 +1,4 @@
 import torch 
-from raygun.model.raygun import Raygun as RaygunV1
 from raygun.modelv2.raygun import Raygun as RaygunV2
 from raygun.modelv2.ltraygun import RaygunLightning
 from raygun.modelv2.esmdecoder import DecoderBlock
@@ -8,6 +7,8 @@ esmtokens = {'<cls>': 0, '<pad>': 1, '<eos>': 2, '<unk>': 3, 'L': 4, 'A': 5, 'G'
 
 def pretrained_uniref50_95000_750M(pretrained=True, progress=True):
     global esmtokens
+
+    from raygun.old_modelv1.raygun import Raygun as RaygunV1
     url = "https://zenodo.org/records/14031281/files/raygun-pretrained.sav?download=1"
     
     ## OLDER version "https://zenodo.org/records/13328458/files/raygun-pretrained.sav?download=1". The new link could be loaded into CPU

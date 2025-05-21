@@ -7,8 +7,9 @@ from raygun.modelv2.raygun import Raygun
 from raygun.modelv2.esmdecoder import DecoderBlock
 from raygun.modelv2.loader import RaygunData
 from raygun.modelv2.ltraygun import RaygunLightning
-from raygun.modelv2.pretrained import load_pretrained_may_16
+from raygun.pretrained import raygun_2_2mil_800M
 from raygun.pll import get_PLL, penalizerepeats
+from raygun.modelv2.training import training
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import torch.nn.functional as F
@@ -30,9 +31,8 @@ from collections import defaultdict
 from Bio.Align import substitution_matrices
 import shlex
 import logging
-import hydra
 from omegaconf import DictConfig, OmegaConf
-from pathlib import Path 
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -47,7 +47,7 @@ def get_cycles(embedding, finallength, model, nratio,
     batch, seq, dim = embedding.shape
     assert batch == 1, "Batch size should be 1 for generation"
     encoder    = model.encoder(embedding, 
-                               error_c = nratio)
+                               noise = nratio)
     changedseq = model.get_sequences_from_fixed(encoder, finallength)[0]
     if numcycles == 0: return changedseq
     assert esmmodel is not None and esmbc is not None
@@ -65,11 +65,62 @@ def get_cycles(embedding, finallength, model, nratio,
             changedseq = model.get_sequences_from_fixed(embedcycle, finallength)[0]
     return changedseq
 
+def get_params():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("templatefasta", 
+                        help = "Template fasta containing a single record. For more than one records, use `generate_samples_multiple.py`")
+    parser.add_argument("sample_out_folder", 
+                        help = "Output folder")
+    parser.add_argument("--lengthinfo", required = True,
+                        help = "Length information in JSON format")
+    parser.add_argument("--noiseratio", type = float, default = 1.0,  
+                        help = "Noise to introduce during generation")
+    parser.add_argument("--num_raygun_samples_to_generate", default = 50, type = float, 
+                       help  = "The number of Raygun samples after PLL filtering")
+    parser.add_argument("--sample_ratio", default = 10, type = float, 
+                       help  = "`#total raygun samples` / `#PLL-filtered raygun samples`")
+    parser.add_argument("--randomize_noise", action = "store_true", default = True, 
+                       help  = "If true then, in each sample generation, randomly choose a error-ratio between 0 and `noiseratio`")
+    parser.add_argument("--device", type = int, default = 0, 
+                        help = "GPU device. If CPU, use -1")
+    parser.add_argument("--numcycles", type = int, default = 1, 
+                       help = "The number of iterative cycles to perform before the final generated sequence")
+    parser.add_argument("--penalizerepeats", action = "store_true", default = False, 
+                       help = "If true, then penalize the repeats.")
+    parser.add_argument("--finetune", action = "store_true", default = False, 
+                       help = "If true, then perform finetuning before generation. Only use in rare circumstances where the off-the-shelf sequence identity is relatively small. (<0.9)")
+    parser.add_argument("--finetune-trainf", help = "Finetune train fasta file. Needed only when finetune is set to true")
+    parser.add_argument("--finetune-validf", help = "Finetune valid fasta file. Needed only when finetune is set to true")
+    parser.add_argument("--finetune-epochs", default=10, type=int, help="How many epochs to finetune. Used only when finetune set to true")
+    parser.add_argument("--finetune-lr", default=1e-5, type=float, help="Finetune learning rate. Used only when finetune set to true")
+    parser.add_argument("--finetune-bsize", default=2, type=int, help="Finetune batch size. Used only when finetune set to true")
+    configs = parser.parse_args()
+    if configs.device < 0:
+        configs.device = "cpu" 
+    return configs.__dict__
+   
+def get_model(config, esmmodel, esmalph):
+    raymodel = raygun_2_2mil_800M(return_lightning_module=True)
+    if config["finetune"]:
+        ep     = config["finetune_epochs"]
+        tfasta = config["finetune_trainf"]
+        vfasta = config["finetune_validf"]
+        lr     = config["finetune_lr"]
+        bsize  = config["finetune_bsize"]
+        outdir = config["sample_out_folder"]
+        
+        assert config["device"] >= 0, "Finetune set to true, but no GPU provided"
+        
+        logger.info(f"Finetune set to true. Starting finetuning for {ep} epochs, with lr={lr} on train:{tfasta} and valid:{vfasta}.")
+        checkpoint = training(raymodel, esmmodel, esmalph, 
+                             tfasta, vfasta, outdir, lr=lr, 
+                             epoch=ep, batchsize=bsize)
+        raymodel.load_state_dict(checkpoint)
+        del checkpoint    
+    return raymodel.model
 
-@hydra.main(config_path="configs/", config_name="config", 
-           version_base=None)
-def main(config: DictConfig):
-    config = OmegaConf.to_container(config, resolve = True)
+def main():
+    config = get_params()
     logger.info("Started the Raygun generation process")
     logger.info(f"Penalizerepeats set to {config['penalizerepeats']}.")
     logger.info(f"Length-agnostic PLL filtering activated. Filter ratio: {config['sample_ratio']}")
@@ -79,8 +130,7 @@ def main(config: DictConfig):
     bc                    = esmalphabet.get_batch_converter()
     
     # load the model 
-    raymodel              = load_pretrained_may_16(local=True, 
-                                                   localurl="/hpc/home/kd312/projects/raygunv2/src/raygun-new-publication/raygun")
+    raymodel              = get_model(config, esmmodel, esmalphabet)
     raymodel              = raymodel.to(config["device"])
     Path(config["sample_out_folder"]).mkdir(exist_ok=True)
     

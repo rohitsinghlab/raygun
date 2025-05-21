@@ -6,7 +6,7 @@ from raygun.modelv2.raygun import Raygun
 from raygun.modelv2.esmdecoder import DecoderBlock
 from raygun.modelv2.loader import RaygunData
 from raygun.modelv2.ltraygun import RaygunLightning
-from raygun.modelv2.pretrained import load_pretrained_may_16
+from raygun.pretrained import raygun_2_2mil_800M
 import yaml
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -64,9 +64,7 @@ def main(config: DictConfig):
 
     logger.info(f"Using pre-trained checkpoint.")
     # load the model 
-    rayltmodule             = load_pretrained_may_16(return_lightning_module=True, 
-                                                   local=True, 
-                                                   localurl="/hpc/home/kd312/projects/raygunv2/src/raygun-new-publication/raygun")
+    rayltmodule             = raygun_2_2mil_800M(return_lightning_module=True)
     
     if "checkpoint" in config and config["checkpoint"] is not None:
         ckptpath   = Path(config["checkpoint"])
@@ -76,6 +74,8 @@ def main(config: DictConfig):
     rayltmodule.traininglog = config["model_saveloc"] + "/error-log.txt"
     rayltmodule.log_wandb   = config["log_wandb"]
     rayltmodule.lr          = config["lr"]
+    rayltmodule.finetune    = False
+    rayltmodule.epoch       = 0
     
     ## train and validation loaders
     traindata = RaygunData(fastafile = config["trainfasta"],
@@ -83,7 +83,7 @@ def main(config: DictConfig):
                            model     = esmmodel, 
                            device    = 0)
     trainloader = DataLoader(traindata, 
-                             shuffle = False, 
+                             shuffle = True, 
                              batch_size = config["batch_size"],
                              collate_fn = traindata.collatefn)
     validdata = RaygunData(fastafile = config["validfasta"],

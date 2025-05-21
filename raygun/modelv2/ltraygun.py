@@ -21,7 +21,8 @@ class RaygunLightning(L.LightningModule):
                 reconstructionloss = 1., 
                 replicateloss = 1.,
                 log_wandb = False,
-                traininglog = "traininglog.txt"):
+                traininglog = "traininglog.txt",
+                finetune = False):
         super().__init__()
         self.model  = raygun
         self.lr     = lr
@@ -51,6 +52,7 @@ class RaygunLightning(L.LightningModule):
         self.coolingtime      = 100
         self.averagingwindow  = 500
         self.std_threshold    = 15
+        self.finetune         = finetune
 
     def log_error(self, batch, loss):
         idx, seq       = zip(*batch)
@@ -68,7 +70,10 @@ class RaygunLightning(L.LightningModule):
             
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.model.parameters(), lr = self.lr)
+        if not self.finetune:
+            optimizer = torch.optim.Adam(self.model.parameters(), lr = self.lr)
+        else:
+            optimizer = torch.optim.Adam(self.model.decoder.parameters(), lr = self.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer,
             mode='min',
@@ -82,7 +87,7 @@ class RaygunLightning(L.LightningModule):
             "optimizer": optimizer,
             "lr_scheduler" : {
                 "scheduler": scheduler,
-                "monitor": "val_blosum_ratio",
+                "monitor": "Blosum ratio",
                 "interval" : "epoch",
                 "freq"     : 1
             },

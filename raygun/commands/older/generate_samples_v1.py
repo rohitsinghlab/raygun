@@ -3,10 +3,10 @@
 # This code is available under the terms of the license available at https://github.com/rohitsinghlab/raygun
 import argparse
 import sys
-from raygun.model.raygun import Raygun
+from raygun.old_modelv1.raygun import Raygun
 from raygun.train_utils import train
-from raygun.model.esmdecoder import DecoderBlock
-from raygun.model.loader import RaygunData
+from raygun.old_modelv1.esmdecoder import DecoderBlock
+from raygun.old_modelv1.loader import RaygunData
 from raygun.pll import get_PLL, penalizerepeats
 import yaml
 from torch.utils.data import DataLoader

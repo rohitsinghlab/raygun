@@ -27,7 +27,8 @@ setup(
         "einops",
         "pyyaml",
         "hydra-core",
-        "lightning"
+        "lightning",
+        "typer"
     ],
     entry_points={
         'console_scripts': [
