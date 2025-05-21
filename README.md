@@ -232,7 +232,7 @@ ratio of 10 implies that 500 sequences has to be generated to finally return 50 
 ```
 One can invoke `raygun-sample-multiple` the following way
 ```
-raygun-sample-single --leninfo <Length json file>  <template-fasta-file> <output-folder>
+raygun-sample-multiple --leninfo <Length json file>  <template-fasta-file> <output-folder>
 ```
 Additionally, in the rare case that the off-the-shelf sequence reconstruction of the template is poor, both `raygun-sample-single` and `raygun-sample-multiple` allows finetuning (as our earlier model) by enabling the `--finetuning` option. For detailed instructions, please look at the `example_sh` folder for working examples. 
 
