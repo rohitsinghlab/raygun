@@ -234,8 +234,7 @@ One can invoke `raygun-sample-multiple` the following way
 ```
 raygun-sample-single --leninfo <Length json file>  <template-fasta-file> <output-folder>
 ```
-
-In addition, if the rare case that the off-the-shelf sequence reconstruction of the template was poor, both `raygun-sample-single` and `raygun-sample-multiple` allows finetuning by setting up the `--finetuning` option. For detailed instructions, please look at the `example_sh` folder for working examples. 
+Additionally, in the rare case that the off-the-shelf sequence reconstruction of the template is poor, both `raygun-sample-single` and `raygun-sample-multiple` allows finetuning (as our earlier model) by enabling the `--finetuning` option. For detailed instructions, please look at the `example_sh` folder for working examples. 
 
 ### Training the model
 
