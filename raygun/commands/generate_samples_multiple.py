@@ -148,7 +148,7 @@ def main():
     
     noiseratio = config["noiseratio"]
     pllaccept  = config["num_raygun_samples_to_generate"]
-    togenerate = pllaccept * config["sample_ratio"]
+    togenerate = int(pllaccept * config["sample_ratio"])
     
     with open(config["lengthinfo"], "r") as js:
         lengthinfo = json.load(js) 
