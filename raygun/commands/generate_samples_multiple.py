@@ -75,7 +75,7 @@ def get_params():
                         help = "Length information in JSON format")
     parser.add_argument("--noiseratio", type = float, default = 1.0,  
                         help = "Noise to introduce during generation")
-    parser.add_argument("--num_raygun_samples_to_generate", default = 50, type = float, 
+    parser.add_argument("--num_raygun_samples_to_generate", default = 50, type = int, 
                        help  = "The number of Raygun samples after PLL filtering")
     parser.add_argument("--sample_ratio", default = 10, type = float, 
                        help  = "`#total raygun samples` / `#PLL-filtered raygun samples`")
