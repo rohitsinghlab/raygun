@@ -154,7 +154,7 @@ def main():
     
     noiseratio = config["noiseratio"]
     pllaccept  = config["num_raygun_samples_to_generate"]
-    togenerate = pllaccept * config["sample_ratio"]
+    togenerate = int(pllaccept * config["sample_ratio"])
     
     records = []
     outprefix = f"{config['sample_out_folder']}/unfiltered_{noiseratio}_{togenerate}"
