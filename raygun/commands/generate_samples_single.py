@@ -59,7 +59,7 @@ def get_params():
                        help  = "The number of Raygun samples after PLL filtering")
     parser.add_argument("--sample_ratio", default = 10, type = float, 
                        help  = "`#total raygun samples` / `#PLL-filtered raygun samples`")
-    parser.add_argument("--randomize_noise", action = "store_true", default = True, 
+    parser.add_argument("--randomize_noise", action = "store_true", default = False, 
                        help  = "If true then, in each sample generation, randomly choose a error-ratio between 0 and `noiseratio`")
     parser.add_argument("--device", type = int, default = 0, 
                         help = "GPU device. If CPU, use -1")
