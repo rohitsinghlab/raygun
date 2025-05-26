@@ -179,7 +179,7 @@ torch.Size([1, 50, 1280])
 ```
 
 **4.2 Generate with indels and substitutions, i.e., change the target length and add some noise**
-If the users desire to modify the template length and add some noise, two additional parameters: `target_lengths` and `error_c` should be provided as input to the Raygun model.
+If the users desire to modify the template length and add some noise, two additional parameters: `target_lengths` and `noise` should be provided as input to the Raygun model.
 ```
 target_len = torch.tensor([210], dtype = int)
 noise      = 0.1 # we recommend noise between 0 and 0.5, larger values provide more sequence diversity
