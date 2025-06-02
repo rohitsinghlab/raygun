@@ -161,6 +161,7 @@ def main():
     
     noiseratio = config["noiseratio"]
     pllaccept  = int(config["num_raygun_samples_to_generate"])
+
     togenerate = int(pllaccept * config["sample_ratio"])
     
     records = []

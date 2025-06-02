@@ -6,4 +6,3 @@ build/
 raygun.egg-info/
 data/
 dist/
-tests/

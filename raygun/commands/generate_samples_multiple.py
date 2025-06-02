@@ -75,11 +75,11 @@ def get_params():
                         help = "Length information in JSON format")
     parser.add_argument("--noiseratio", type = float, default = 1.0,  
                         help = "Noise to introduce during generation")
-    parser.add_argument("--num_raygun_samples_to_generate", default = 50, type = float, 
+    parser.add_argument("--num_raygun_samples_to_generate", default = 50, type = int, 
                        help  = "The number of Raygun samples after PLL filtering")
     parser.add_argument("--sample_ratio", default = 10, type = float, 
                        help  = "`#total raygun samples` / `#PLL-filtered raygun samples`")
-    parser.add_argument("--randomize_noise", action = "store_true", default = True, 
+    parser.add_argument("--randomize_noise", action = "store_true", default = False, 
                        help  = "If true then, in each sample generation, randomly choose a error-ratio between 0 and `noiseratio`")
     parser.add_argument("--device", type = int, default = 0, 
                         help = "GPU device. If CPU, use -1")
@@ -148,7 +148,7 @@ def main():
     
     noiseratio = config["noiseratio"]
     pllaccept  = config["num_raygun_samples_to_generate"]
-    togenerate = pllaccept * config["sample_ratio"]
+    togenerate = int(pllaccept * config["sample_ratio"])
     
     with open(config["lengthinfo"], "r") as js:
         lengthinfo = json.load(js) 
