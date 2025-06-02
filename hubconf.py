@@ -54,3 +54,28 @@ def pretrained_uniref50_2_2mil_800M(pretrained=True, progress=True):
         esmdecoder.load_state_dict(deccheckpoint["model_state"])
         del deccheckpoint, checkpoint
     return rayltmodule, esmdecoder, hyparams
+
+def pretrained_uniref50_4_4mil_800M(pretrained=True, progress=True):
+    updatedrayurl = "https://zenodo.org/records/15578824/files/may30-chkpoint-trained-on-4.4m.ckpt?download=1"
+    esmdecoderurl = "https://zenodo.org/records/15447367/files/esm-decoder.sav?download=1"
+    if pretrained:
+        model         = RaygunV2(numencoders = 12, 
+                              numdecoders  = 12)
+        hyparams      = {"numencoders" : 12, 
+                         "numdecoders" : 12,
+                         "dim"         : 1280,
+                         "dropout"     : 0.1,
+                         "reduction"   : 50, 
+                         "activation"  : "gelu"}
+        rayltmodule      = RaygunLightning(model)
+        checkpoint    = torch.hub.load_state_dict_from_url(updatedrayurl, progress=progress,
+                                                       map_location = torch.device("cpu"))
+        rayltmodule.load_state_dict(checkpoint["state_dict"])
+        esmdecoder    = DecoderBlock(dim = 1280, 
+                                     nhead = 20)
+        deccheckpoint = torch.hub.load_state_dict_from_url(esmdecoderurl, progress=progress,
+                                                       map_location = torch.device("cpu"))
+        
+        esmdecoder.load_state_dict(deccheckpoint["model_state"])
+        del deccheckpoint, checkpoint
+    return rayltmodule, esmdecoder, hyparams

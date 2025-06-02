@@ -45,7 +45,7 @@ class RaygunData(Dataset):
         self.bc        = self.alphabet.get_batch_converter()
         self.records   = list(SeqIO.parse(fastafile, "fasta"))
         self.sequences = [(rec.id, str(rec.seq)) for rec in self.records if 
-                         len(rec.seq) <= maxlength and len(rec.seq) > minlength]
+                         len(rec.seq) <= maxlength and len(rec.seq) >= minlength]
         if precomputed:
             h5exists = lambda x : os.path.exists(f"{embeddingfolder}/{x}.h5")
             self.sequences = [s for s in self.sequences if h5exists(s[0])]

@@ -49,13 +49,16 @@ def get_params():
                         help = "Template fasta containing a single record. For more than one records, use `generate_samples_multiple.py`")
     parser.add_argument("sample_out_folder", 
                         help = "Output folder")
+    parser.add_argument("--checkpoint", 
+                        default = "data/models/train-may23-4.4m-ep2-run1/model-eepoch=00-sstep=003899-val_blosum_ratio=0.9222.ckpt", 
+                       help="Checkpoint")
     parser.add_argument("--minlength", type = int, required = True,
                         help = "Minimum length")
     parser.add_argument("--maxlength", type = int, required = True,
                         help = "Maximum length")
     parser.add_argument("--noiseratio", type = float, default = 1.0,  
                         help = "Noise to introduce during generation")
-    parser.add_argument("--num_raygun_samples_to_generate", default = 50, type = float, 
+    parser.add_argument("--num_raygun_samples_to_generate", default = 50, type = int, 
                        help  = "The number of Raygun samples after PLL filtering")
     parser.add_argument("--sample_ratio", default = 10, type = float, 
                        help  = "`#total raygun samples` / `#PLL-filtered raygun samples`")
@@ -120,7 +123,11 @@ def get_model(config, esmmodel, esmalph):
                              tfasta, vfasta, outdir, lr=lr, 
                              epoch=ep, batchsize=bsize)
         raymodel.load_state_dict(checkpoint)
-        del checkpoint    
+        del checkpoint  
+    elif config["checkpoint"] is not None:
+        checkpoint = torch.load(config["checkpoint"], weights_only=True)
+        raymodel.load_state_dict(checkpoint["state_dict"], strict=False)
+        del checkpoint
     return raymodel.model
         
 
@@ -153,8 +160,8 @@ def main():
     averaged_encoder = 0
     
     noiseratio = config["noiseratio"]
-    pllaccept  = config["num_raygun_samples_to_generate"]
-    togenerate = pllaccept * config["sample_ratio"]
+    pllaccept  = int(config["num_raygun_samples_to_generate"])
+    togenerate = int(pllaccept * config["sample_ratio"])
     
     records = []
     outprefix = f"{config['sample_out_folder']}/unfiltered_{noiseratio}_{togenerate}"
@@ -205,7 +212,7 @@ def main():
         plls[nameassignment[name]] += [(name, pll)]
     plldf = pd.DataFrame(plldf, columns = ["name", "length", "pll", "sequence"])
     plldf.to_csv(f"{outprefix}.pll.tsv", sep = "\t")
-
+    
     filteredplls = []
     for key, val in plls.items():
         filteredplls += [x[0] for x in sorted(val, 
