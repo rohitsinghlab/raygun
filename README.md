@@ -50,6 +50,7 @@ Raygun. bioRxiv, 2024-08.** [bioRxiv preprint](https://www.biorxiv.org/content/1
   1. Due to the higher reconstruction accuracy of this new model (~96% median sequence recapitulation on all mouse and human sequences in SwissProt), we now recommend zero-shot usage of Raygun i.e., finetuning is unnecessary in most cases.
   2. Raygun now allows for batch sizes greater than 1.
 
+**[June 2] Added Raygun version 0.2 model trained on 4.4 million UNIREF50 sequences**
 -----
 
 ## Introduction 🧬
@@ -121,6 +122,7 @@ Two Raygun models are currently available for users.
 
 | model name          | Trained on         | Release date | Version  |
 |---------------------|--------------------|--------------|----------|
+| raygun_4_4mil_800M  | 4.4 mil Uniref50   | June, 2025   |   0.2    |
 | raygun_2_2mil_800M  | 2.2 mil Uniref50   | May, 2025    |   0.2    |
 | raygun_100k_750M    | 100K Uniref50      | Aug, 2024    |   0.1    |
 
