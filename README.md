@@ -139,7 +139,7 @@ Here is how you would obtain fixed-length embeddings and generate new sample(s) 
 ## loading the model
 
 from raygun.pretrained import raygun_2_2mil_800M
-raymodel = raygun_2_2mil_800M().to(0)
+raymodel = raygun_4_4mil_800M().to(0)
 ```
 
 **2. Also load the ESM-2 650M model (Raygun accepts as input ESM-2 650M embeddings)**
