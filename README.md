@@ -53,6 +53,7 @@ Raygun. bioRxiv, 2024-08.** [bioRxiv preprint](https://www.biorxiv.org/content/1
 **[June 2] Added Raygun version 0.2 model trained on 4.4 million UNIREF50 sequences**
 
 We will soon be releasing models trained on ~10 million Uniref50 sequences and models with fixed lengths (K=25). 
+
 -----
 
 ## Introduction 🧬
