@@ -14,6 +14,8 @@ RAYGUN_MODEL_NAMES = {'raygun_100k_750M': None,
 MODEL = None
 FIRST_CALL = True
 
+ESM_EMBEDDING_MODEL = None
+
 
 def main():
     """
@@ -31,7 +33,7 @@ def main():
 
 
 def run_raygun(seq_ids, seqs, target_lengths, noise, model="raygun_2_2mil_800M", 
-               return_logits_and_seqs=True, embedding_model=None):
+               return_logits_and_seqs=True, embedding_model=ESM_EMBEDDING_MODEL):
     """
     Inputs:
         - seq_ids (list[str])
@@ -67,7 +69,9 @@ def run_raygun(seq_ids, seqs, target_lengths, noise, model="raygun_2_2mil_800M",
         model = RAYGUN_MODEL_NAMES[model]
 
     if not embedding_model:
-        embedding_model = ESMUtility()
+        global ESM_EMBEDDING_MODEL
+        ESM_EMBEDDING_MODEL = ESMUtility()
+        embedding_model = ESM_EMBEDDING_MODEL
 
     # run the raygun model
     out = {}
@@ -92,7 +96,8 @@ def run_raygun(seq_ids, seqs, target_lengths, noise, model="raygun_2_2mil_800M",
 
 
 def run_raygun_single_seq(seq, target_lengths, noise, model="raygun_2_2mil_800M", 
-        return_logits_and_seqs=True, embedding_model=None):
+        return_logits_and_seqs=True, embedding_model=ESM_EMBEDDING_MODEL, 
+        persist_model=False, persist_embedding_model=False):
     global FIRST_CALL
 
     # handle target lengths
@@ -102,13 +107,20 @@ def run_raygun_single_seq(seq, target_lengths, noise, model="raygun_2_2mil_800M"
         target_lengths = torch.tensor(target_lengths, dtype=int)
 
     # load model if it is not already passed in 
+    model_name = None
     if isinstance(model, str):
         load_raygun_model(model)
+        model_name = model
         model = RAYGUN_MODEL_NAMES[model]
-        
-    # handle embedding model
+    else:
+        persist_model = False
+
     if not embedding_model:
-        embedding_model = ESMUtility()
+        global ESM_EMBEDDING_MODEL
+        ESM_EMBEDDING_MODEL = ESMUtility()
+        embedding_model = ESM_EMBEDDING_MODEL
+    else:
+        persist_embedding_model = False
     
     embedding = embedding_model(seq, average_pool=False)
     results = model(embedding, target_lengths=target_lengths, noise=noise, return_logits_and_seqs=return_logits_and_seqs)
@@ -121,6 +133,13 @@ def run_raygun_single_seq(seq, target_lengths, noise, model="raygun_2_2mil_800M"
         # print('-' * 30)
 
     FIRST_CALL = False
+
+    # handle model and embedding model persistence
+    if not persist_model:
+        RAYGUN_MODEL_NAMES[model_name] = None
+    
+    if not persist_embedding_model:
+        ESM_EMBEDDING_MODEL = None
 
     if return_logits_and_seqs:
         fixed_length_embedding = results['fixed_length_embedding']
