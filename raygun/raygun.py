@@ -4,12 +4,15 @@
 
 #--- imports ---
 import torch
+import numbers
+import numpy as np
 
 
 RAYGUN_MODEL_NAMES = {'raygun_100k_750M': None,
                       'raygun_2_2mil_800M': None, 
                       'raygun_4_4mil_800M': None}
 MODEL = None
+FIRST_CALL = True
 
 
 def main():
@@ -17,26 +20,119 @@ def main():
     Main function to execute the raygun functionality.
     This function is a placeholder for the actual implementation.
     """
-    print("Raygun functionality is not yet implemented.")
+    seq= ''.join(np.random.choice(['A', 'C', 'G', 'T'], size=100, replace=True).tolist())
+    results = run_raygun(['seq1'], [seq], target_lengths=[[91]], noise=0.0, return_logits_and_seqs=True)
 
-    seq= "MKTAY" * 20
-    print(run_raygun(seq, target_length=75, noise=0.0))
+    print('-' * 30)
+    print(results)
+    print('-' * 30)
+
+    print(results['seq1']['logits'].shape)
 
 
-def run_raygun(seq, target_length, noise, 
-               model_name="raygun_2_2mil_800M", return_logits_and_seqs=True, embedding_model=None):
-    # load the model
-    load_raygun_model(model_name)
-    model = RAYGUN_MODEL_NAMES[model_name]
+def run_raygun(seq_ids, seqs, target_lengths, noise, model="raygun_2_2mil_800M", 
+               return_logits_and_seqs=True, embedding_model=None):
+    """
+    Inputs:
+        - seq_ids (list[str])
+        - seqs (list[str])
+        - target_lengths (list[list[int]]) - either a global target length or a 
+          list of list of target lengths for each sequence. So for example, if we only have one sequence 
+          and want to change it to 100 aas, target_lengths=[[100]] or target_lengths=100
+        - noise (float or list[float]) - either a global noise level or one noise level for each 
+            sequence. Generally between 0.0 and 0.5.
+        - model (str) - name of model
+        - return logits_and_seqs (bool) - Flag for where or not to return logits and sequences
+        - embedding_model - takes sequence as input and outputs ESM2 embeddings. Optional. 
+    
+    Output: dictionary where keys are the sequence ids and values are the:
+        - fixed length embedding
+        - reconstructed embedding
+        - logits (if return_logits_and_seqs is True)
+        - generated sequences (if return_logits_and_seqs is True)
+    """
+    # validate inputs
+    assert len(seq_ids) == len(seqs)
+    if isinstance(target_lengths, numbers.Number):
+        target_lengths = [[target_lengths] for _ in range(len(seqs))]
+    assert len(target_lengths) == len(seqs)
+    if isinstance(noise, numbers.Number):
+        noise = [noise for _ in range(len(seqs))]
+    assert len(noise) == len(seqs)
 
+
+    # load model if it is not already passed in 
+    if isinstance(model, str):
+        load_raygun_model(model)
+        model = RAYGUN_MODEL_NAMES[model]
+
+    if not embedding_model:
+        embedding_model = ESMUtility()
+
+    # run the raygun model
+    out = {}
+    for _id, _seq, _target_lengths, _noise in zip(seq_ids, seqs, target_lengths, noise):
+        out[_id] = {}
+        out[_id]['original_sequence'] = _seq
+        
+        if return_logits_and_seqs:
+            fle, re, log, gs = run_raygun_single_seq(_seq, _target_lengths, _noise, 
+                    model, return_logits_and_seqs, embedding_model)
+            out[_id]['fixed_length_embedding'] = fle.squeeze()
+            out[_id]['reconstructed_embedding'] = re.squeeze()
+            out[_id]['logits'] = log.squeeze()
+            out[_id]['generated_sequences'] = gs
+        else:
+            fle, re, = run_raygun_single_seq(_seq, _target_lengths, _noise, 
+                    model, return_logits_and_seqs, embedding_model)
+            out[_id]['fixed_length_embedding'] = fle.squeeze()
+            out[_id]['reconstructed_embedding'] = re.squeeze()
+
+    return out
+
+
+def run_raygun_single_seq(seq, target_lengths, noise, model="raygun_2_2mil_800M", 
+        return_logits_and_seqs=True, embedding_model=None):
+    global FIRST_CALL
+
+    # handle target lengths
+    if isinstance(target_lengths, numbers.Number):
+        target_lengths = torch.tensor([target_lengths], dtype=int) 
+    else:
+        target_lengths = torch.tensor(target_lengths, dtype=int)
+
+    # load model if it is not already passed in 
+    if isinstance(model, str):
+        load_raygun_model(model)
+        model = RAYGUN_MODEL_NAMES[model]
+        
     # handle embedding model
     if not embedding_model:
         embedding_model = ESMUtility()
     
     embedding = embedding_model(seq, average_pool=False)
-    results = model(embedding, target_lengths=target_length, noise=noise, return_logits_and_seqs=return_logits_and_seqs)
+    results = model(embedding, target_lengths=target_lengths, noise=noise, return_logits_and_seqs=return_logits_and_seqs)
 
-    return results
+    if FIRST_CALL:
+        pass
+        # print('-' * 30)
+        # print("shape of esm embedding:", embedding.shape)
+        # print("results type:", type(results))
+        # print('-' * 30)
+
+    FIRST_CALL = False
+
+    if return_logits_and_seqs:
+        fixed_length_embedding = results['fixed_length_embedding']
+        reconstructed_embedding = results['reconstructed_embedding']
+        logits = results['logits']
+        generated_sequences = results['generated-sequences']
+
+        return fixed_length_embedding, reconstructed_embedding, logits, generated_sequences
+    else:
+        fixed_length_embedding = results['fixed_length_embedding']
+        reconstructed_embedding = results['reconstructed_embedding']
+        return fixed_length_embedding, reconstructed_embedding
 
 
 def load_raygun_model(model_name, device=None):
@@ -109,7 +205,7 @@ class ESMUtility:
     
     def get_embedding(self, seq, device=None, average_pool=False, return_contacts=False):
         """
-        Get embeddings for a list of sequences.
+        Get embeddings for a single sequence.
         """
         # handle device 
         if device is None:
