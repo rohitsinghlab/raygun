@@ -33,7 +33,8 @@ def main():
 
 
 def run_raygun(seq_ids, seqs, target_lengths, noise, model="raygun_2_2mil_800M", 
-               return_logits_and_seqs=True, embedding_model=ESM_EMBEDDING_MODEL):
+               return_logits_and_seqs=True, embedding_model=ESM_EMBEDDING_MODEL, 
+               persist_model=False, persist_embedding_model=False):
     """
     Inputs:
         - seq_ids (list[str])
@@ -46,6 +47,8 @@ def run_raygun(seq_ids, seqs, target_lengths, noise, model="raygun_2_2mil_800M",
         - model (str) - name of model
         - return logits_and_seqs (bool) - Flag for where or not to return logits and sequences
         - embedding_model - takes sequence as input and outputs ESM2 embeddings. Only supports ESM2_t33_650M_UR50D. 
+        - persist_model (bool) - whether to store the model in memory after running (set to true if you want to use raygun multiple times)
+        - persist_embedding_model (bool) - whether to store the esm2 embedding model in memory after running
     
     Output: dictionary where keys are the sequence ids and values are the:
         - fixed length embedding
@@ -64,14 +67,20 @@ def run_raygun(seq_ids, seqs, target_lengths, noise, model="raygun_2_2mil_800M",
 
 
     # load model if it is not already passed in 
+    model_name = None
     if isinstance(model, str):
         load_raygun_model(model)
+        model_name = model
         model = RAYGUN_MODEL_NAMES[model]
+    else:
+        persist_model = False
 
     if not embedding_model:
         global ESM_EMBEDDING_MODEL
         ESM_EMBEDDING_MODEL = ESMUtility()
         embedding_model = ESM_EMBEDDING_MODEL
+    else:
+        persist_embedding_model = False
 
     # run the raygun model
     out = {}
@@ -81,7 +90,7 @@ def run_raygun(seq_ids, seqs, target_lengths, noise, model="raygun_2_2mil_800M",
         
         if return_logits_and_seqs:
             fle, re, log, gs = run_raygun_single_seq(_seq, _target_lengths, _noise, 
-                    model, return_logits_and_seqs, embedding_model)
+                    model, return_logits_and_seqs, embedding_model, persist_model, persist_embedding_model)
             out[_id]['fixed_length_embedding'] = fle.squeeze()
             out[_id]['reconstructed_embedding'] = re.squeeze()
             out[_id]['logits'] = log.squeeze()
@@ -91,6 +100,14 @@ def run_raygun(seq_ids, seqs, target_lengths, noise, model="raygun_2_2mil_800M",
                     model, return_logits_and_seqs, embedding_model)
             out[_id]['fixed_length_embedding'] = fle.squeeze()
             out[_id]['reconstructed_embedding'] = re.squeeze()
+
+
+    # handle model and embedding model persistence
+    if not persist_model:
+        RAYGUN_MODEL_NAMES[model_name] = None
+    
+    if not persist_embedding_model:
+        ESM_EMBEDDING_MODEL = None
 
     return out
 
