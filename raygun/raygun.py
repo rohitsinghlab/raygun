@@ -30,7 +30,7 @@ def main():
     print(results['seq1']['logits'].shape)
 
 
-def run_raygun(seq_ids, seqs, target_lengths, noise, model="raygun_2_2mil_800M", 
+def run_raygun(seq_ids, seqs, target_lengths, noise, model="raygun_4_4mil_800M", 
                return_logits_and_seqs=True, embedding_model=None):
     """
     Inputs:
