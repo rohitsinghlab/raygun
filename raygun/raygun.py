@@ -43,7 +43,7 @@ def run_raygun(seq_ids, seqs, target_lengths, noise, model="raygun_4_4mil_800M",
             sequence. Generally between 0.0 and 0.5.
         - model (str) - name of model
         - return logits_and_seqs (bool) - Flag for where or not to return logits and sequences
-        - embedding_model - takes sequence as input and outputs ESM2 embeddings. Optional. 
+        - embedding_model - takes sequence as input and outputs ESM2 embeddings. Only supports ESM2_t33_650M_UR50D. 
     
     Output: dictionary where keys are the sequence ids and values are the:
         - fixed length embedding
