@@ -152,13 +152,13 @@ def load_raygun_model(model_name, device=None):
     if model_name not in RAYGUN_MODEL_NAMES:
         raise ValueError(f"Model {model_name} is not supported. Supported models: {RAYGUN_MODEL_NAMES}")
     elif model_name == 'raygun_100k_750M':
-        from pretrained import raygun_100k_750M
+        from .pretrained import raygun_100k_750M
         RAYGUN_MODEL_NAMES['raygun_100k_750M'] = raygun_100k_750M().to(device)
     elif model_name == 'raygun_2_2mil_800M':
-        from pretrained import raygun_2_2mil_800M
+        from .pretrained import raygun_2_2mil_800M
         RAYGUN_MODEL_NAMES['raygun_2_2mil_800M'] = raygun_2_2mil_800M().to(device)
     elif model_name == 'raygun_4_4mil_800M':
-        from pretrained import raygun_4_4mil_800M
+        from .pretrained import raygun_4_4mil_800M
         RAYGUN_MODEL_NAMES['raygun_4_4mil_800M'] = raygun_4_4mil_800M().to(device)
 
 
