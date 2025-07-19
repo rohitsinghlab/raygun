@@ -79,8 +79,7 @@ class RaygunLightning(L.LightningModule):
             mode='min',
             factor=0.5,
             patience=5,
-            min_lr=1e-6,
-            verbose=True
+            min_lr=1e-6
         )
         # Return optimizer and scheduler
         return {

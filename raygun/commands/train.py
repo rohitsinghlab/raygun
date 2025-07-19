@@ -6,7 +6,7 @@ from raygun.modelv2.raygun import Raygun
 from raygun.modelv2.esmdecoder import DecoderBlock
 from raygun.modelv2.loader import RaygunData
 from raygun.modelv2.ltraygun import RaygunLightning
-from raygun.pretrained import raygun_2_2mil_800M
+from raygun.pretrained import raygun_4_4mil_800M
 import yaml
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -64,7 +64,7 @@ def main(config: DictConfig):
 
     logger.info(f"Using pre-trained checkpoint.")
     # load the model 
-    rayltmodule             = raygun_2_2mil_800M(return_lightning_module=True)
+    rayltmodule             = raygun_4_4mil_800M(return_lightning_module=True)
     
     if "checkpoint" in config and config["checkpoint"] is not None:
         ckptpath   = Path(config["checkpoint"])
@@ -76,6 +76,13 @@ def main(config: DictConfig):
     rayltmodule.lr          = config["lr"]
     rayltmodule.finetune    = False
     rayltmodule.epoch       = 0
+    
+    ## fixed the batching problem 
+    if "fix_batching_esmdecoder" in config and config["fix_batching_esmdecoder"]:
+        rayltmodule.model.esmdecoder.fixed_batching=True
+    else:
+        rayltmodule.model.esmdecoder.fixed_batching=False
+        
     
     ## train and validation loaders
     traindata = RaygunData(fastafile = config["trainfasta"],
