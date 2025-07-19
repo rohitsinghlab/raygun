@@ -125,7 +125,8 @@ class Raygun(nn.Module):
                  numencoders = 10, numdecoders = 10,
                  dropout = 0.1,
                  reduction = 50, activation = "gelu",
-                 esmdecodertotokenfile = None):
+                 esmdecodertotokenfile = None, 
+                 fixed_esm_batching=False):
         super(Raygun, self).__init__()
         self.encoder = RaygunEncoder(dim     = dim, 
                                 reduction    = reduction, 
@@ -142,7 +143,8 @@ class Raygun(nn.Module):
                                  activation  = activation)
 
         self.esmdecoder = DecoderBlock(dim = dim, 
-                                      nhead = 20)
+                                      nhead = 20, 
+                                      fixed_batching=fixed_esm_batching)
         if esmdecodertotokenfile is not None:
             checkpoint = torch.load(esmdecodertotokenfile)
             self.esmdecoder.load_state_dict(checkpoint["model_state"])

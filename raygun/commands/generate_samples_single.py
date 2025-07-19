@@ -8,7 +8,7 @@ from raygun.modelv2.esmdecoder import DecoderBlock
 from raygun.modelv2.loader import RaygunData
 from raygun.modelv2.ltraygun import RaygunLightning
 from raygun.modelv2.training import training
-from raygun.pretrained import raygun_2_2mil_800M
+from raygun.pretrained import raygun_4_4mil_800M
 from raygun.pll import get_PLL, penalizerepeats
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -35,6 +35,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from pathlib import Path 
 import sys
+from collections import Counter
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -50,7 +51,7 @@ def get_params():
     parser.add_argument("sample_out_folder", 
                         help = "Output folder")
     parser.add_argument("--checkpoint", 
-                        default = "data/models/train-may23-4.4m-ep2-run1/model-eepoch=00-sstep=003899-val_blosum_ratio=0.9222.ckpt", 
+                        default = None, 
                        help="Checkpoint")
     parser.add_argument("--minlength", type = int, required = True,
                         help = "Minimum length")
@@ -72,6 +73,7 @@ def get_params():
                        help = "If true, then penalize the repeats.")
     parser.add_argument("--finetune", action = "store_true", default = False, 
                        help = "If true, then perform finetuning before generation. Only use in rare circumstances where the off-the-shelf sequence identity is relatively small. (<0.9)")
+    parser.add_argument("--invalid-aa-penalty", default=5.0, type=float, help="Penalty for generating Xs in the sequence.")
     parser.add_argument("--finetune-trainf", help = "Finetune train fasta file. Needed only when finetune is set to true")
     parser.add_argument("--finetune-validf", help = "Finetune valid fasta file. Needed only when finetune is set to true")
     parser.add_argument("--finetune-epochs", default=10, type=int, help="How many epochs to finetune. Used only when finetune set to true")
@@ -107,7 +109,8 @@ def get_cycles(embedding, finallength, model, nratio,
     return changedseq
     
 def get_model(config, esmmodel, esmalph):
-    raymodel = raygun_2_2mil_800M(return_lightning_module=True)
+    logging.info(f"Loading the raygun model `raygun_4_4mil_800M`")
+    raymodel = raygun_4_4mil_800M(return_lightning_module=True)
     if config["finetune"]:
         ep     = config["finetune_epochs"]
         tfasta = config["finetune_trainf"]
@@ -203,7 +206,9 @@ def main():
         pll  = get_PLL(seq, esmmodel, esmalphabet, bc)
         
         # adjusted pll
-        pll  = pll / abs(-0.406 * len_ + 1.363)        
+        pll  = pll / abs(-0.406 * len_ + 1.363) 
+        no_invalid_aas = Counter(seq)["X"]
+        pll  = pll - no_invalid_aas * config["invalid_aa_penalty"]
 
         # penalized repeats
         if config["penalizerepeats"]:
