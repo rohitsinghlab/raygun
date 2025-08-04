@@ -7,7 +7,7 @@ from raygun.modelv2.raygun import Raygun
 from raygun.modelv2.esmdecoder import DecoderBlock
 from raygun.modelv2.loader import RaygunData
 from raygun.modelv2.ltraygun import RaygunLightning
-from raygun.pretrained import raygun_2_2mil_800M
+from raygun.pretrained import raygun_2_2mil_800M, raygun_4_4mil_800M
 from raygun.pll import get_PLL, penalizerepeats
 from raygun.modelv2.training import training
 from torch.utils.data import DataLoader
@@ -100,7 +100,7 @@ def get_params():
     return configs.__dict__
    
 def get_model(config, esmmodel, esmalph):
-    raymodel = raygun_2_2mil_800M(return_lightning_module=True)
+    raymodel = raygun_4_4mil_800M(return_lightning_module=True)
     if config["finetune"]:
         ep     = config["finetune_epochs"]
         tfasta = config["finetune_trainf"]
