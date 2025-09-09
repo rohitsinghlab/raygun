@@ -88,7 +88,7 @@ Raygun has a few package requirements: `numpy`,
 `pandas`, `fair-esm`, `pyyaml`, `h5py`, `einops` and `torch`
 (the version suitable for your GPU). We verified that our model works on
 A100 and A6000 GPUs, for the following specifications:
-
+-   python=3.11
 -   fair-esm=2.0.0
 -   numpy=1.26.4
 -   pandas=2.1.4
