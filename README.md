@@ -250,34 +250,10 @@ We have provided the raygun training code in the `raygun/commands/train.py` file
 
 We can invoke the train command in bash the following way
 ``` bash
-python raygun/commands/train.py --config-path example_configs/version2 devices=<no_devices> \ 
-                           model_saveloc=<saveloc> trainfasta=<tfastafile> validfasta=<vfastafile> 
-```
-
-The configuration file `example_configs/version2/train.yaml` has additional parameters that can be modified.
-``` YAML
-devices: null           #required
-model_saveloc: null     #required
-trainfasta: null        #required
-validfasta: null        #required
-epoch: 10
-num_to_save: 3
-lr: 0.00002
-
-esm2_embedding_saveloc: null # if specified, the ESM-2 embeddings will be saved here.
-
-###### Section 3: OTHER PARAMETERS ########
-## you can ignore these for now
-reconstructionlossratio: 1
-replicatelossratio: 1
-crossentropylossratio: 1
-maxlength: 1500
-minallowedlength: 55
-clip: 0.0001
-batch_size: 2
-accumulate_grad_batches: 1
-
-log_wandb: false
+raygun-train <train_fasta> <valid_fasta> <model_saveloc> [--checkpoint=<checkpoint> --mod=<2.2M|4.4M|8.8M> --lr=<learning rate>        \
+             --devices=<number of CUDA devices> --epoch=<no of epochs> --batch_size=<batch size> --reclosswt=<reconstruction loss wt>  \ 
+             --replosswt=<repetition loss wt> --celosswt=<cross entropy loss wt> --reduction=<Fixed length reduction size: default=50> \
+             --num_to_save=<number of checkpoints to save> --per_epoch_val_check=<how many validation check per epoch? default=1>] 
 ```
 Note that this training code is provided as a baseline reference. Any modifications on this code to improve the training procedure is highly encouraged.
 
