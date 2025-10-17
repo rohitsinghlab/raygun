@@ -6,8 +6,7 @@ from raygun.modelv2.raygun import Raygun
 from raygun.modelv2.esmdecoder import DecoderBlock
 from raygun.modelv2.loader import RaygunData
 from raygun.modelv2.ltraygun import RaygunLightning
-from raygun.pretrained import raygun_4_4mil_800M
-import yaml
+import raygun.pretrained as pretrained 
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import torch.nn.functional as F
@@ -31,6 +30,8 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 import wandb
 from datetime import datetime
 from pathlib import Path
+import warnings
+import argparse
 
 torch.set_float32_matmul_precision('high')
 
@@ -41,66 +42,113 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
-@hydra.main(config_path="configs/", config_name="train",
-            version_base = None)
-def main(config: DictConfig):
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("train_fasta", help="Train fasta file")
+    parser.add_argument("valid_fasta", help="Validation fasta file")
+    parser.add_argument("model_saveloc", help="Directory for saving the model")
+    parser.add_argument("--checkpoint", default=None, help="Load from previous checkpoint if it exists")
+    parser.add_argument("--mod", default="8.8M", choices=["2.2M", "4.4M", "8.8M"], 
+                        help="If the previously trained checkpoint does not exist, it starts training from one of three saved checkpoints in zenodo")
+    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate.")
+    parser.add_argument("--devices", type=int, default=1, help="Number of devices. Default: 1")
+    parser.add_argument("--batch_size", type=int, default=4, help="The target batch size. For A100, batch_size=5 generally works.")
+    parser.add_argument("--epoch", type=int, default=10, help="Number of epochs")
+    parser.add_argument("--clip", type=float, default=0.00001, help="Maximum gradient clip")
+    parser.add_argument("--accumulate_grad_batches", type=int, default=4, help="How many gradient accumulation steps before backward?")
+    parser.add_argument("--maxlength", type=int, default=1500, help="Maximum seq length")
+    parser.add_argument("--minlength", type=int, default=50, help="Minimum seq length")
+    parser.add_argument("--reclosswt", type=float, default=1, help="Reconstruction loss contribution")
+    parser.add_argument("--replosswt", type=float, default=1, help="Repetition loss contribution")
+    parser.add_argument("--celosswt", type=float, default=1, help="Cross Entropy loss contribution")
+    parser.add_argument("--log_wandb", default=False, action="store_true", help="Logging with Wandb enabled")
+    parser.add_argument("--reduction", type=int, default=50, help="The fixed length reduced dimension")
+    parser.add_argument("--num_to_save", type=int, default=4, help="How many checkpoints to save in each run")
+    parser.add_argument("--data_workers", type=int, default=8, help="Dataloader workers")
+    parser.add_argument("--per_epoch_val_check", type=int, default=1, help="How many times do we want to do validations per epoch")
+    configs = parser.parse_args()
+    return configs.__dict__
+
+def main():
+    config   = get_args()
     logger.info("Running Raygun training...")
-    config = OmegaConf.to_container(config, resolve=True)
 
     # create model and embedding folders
     os.makedirs(config["model_saveloc"], exist_ok = True)
-    if config["esm2_embedding_saveloc"] is not None:
-        os.makedirs(config["model_saveloc"], exist_ok = True)
 
     # Use ESM-2 650M
     esmmodel, esmalphabet = esm.pretrained.esm2_t33_650M_UR50D()
-    esmmodel              = esmmodel.to(0)
     esmmodel.eval()
 
     if config["log_wandb"]:
         wandb_logger = WandbLogger(project = "BATCH-TRAINING-RAYGUN")
     else:
         wandb_logger = None
-
-    logger.info(f"Using pre-trained checkpoint.")
-    # load the model 
-    rayltmodule             = raygun_4_4mil_800M(return_lightning_module=True)
     
-    if "checkpoint" in config and config["checkpoint"] is not None:
-        ckptpath   = Path(config["checkpoint"])
-        checkpoint = torch.load(ckptpath, weights_only = True)
-        rayltmodule.load_state_dict(checkpoint["state_dict"])
+    # load the model 
+    logger.info(f"Initial model loading setup...")
+    checkpoint              = config.get("checkpoint", None)
+    if checkpoint is not None:
+        numencoders= config.get("numencoders", 12)
+        numdecoders= config.get("numdecoders", 12)
+        rmodel     = Raygun(numencoders=numencoders,
+                            numdecoders=numdecoders, 
+                            fixed_esm_batching=True)
+        with warnings.catch_warnings(record=True) as w:
+            rayltmodule = RaygunLightning.load_from_checkpoint(checkpoint, 
+                                                               raygun=rmodel, 
+                                                               esmmodel=esmmodel,
+                                                               strict=False)
+    else: 
+        mod        = config.get("pretrained_version", "8.8")
+        loadfunc   = (pretrained.raygun_2_2mil_800M if mod=="2.2" else
+                     (pretrained.raygun_4_4mil_800M if mod=="4.4" else
+                      pretrained.raygun_8_8mil_800M))
+        rayltmodule= loadfunc(return_lightning_module=True)
+        
+    logger.info(f"Using pre-trained checkpoint.")
 
     rayltmodule.traininglog = config["model_saveloc"] + "/error-log.txt"
-    rayltmodule.log_wandb   = config["log_wandb"]
-    rayltmodule.lr          = config["lr"]
+    rayltmodule.log_wandb   = config.get("log_wandb", False)
+    rayltmodule.lr          = config.get("lr", 1e-3)
     rayltmodule.finetune    = False
     rayltmodule.epoch       = 0
     
-    ## fixed the batching problem 
-    if "fix_batching_esmdecoder" in config and config["fix_batching_esmdecoder"]:
-        rayltmodule.model.esmdecoder.fixed_batching=True
-    else:
-        rayltmodule.model.esmdecoder.fixed_batching=False
-        
+    # if the reduction fixed length is to be changed
+    redlen                                          = config["reduction"]
+    logger.info(f"Setting reduction length to {redlen}")
+    rayltmodule.model.encoder.redlength             = redlen
+    rayltmodule.model.encoder.reduction.reduce_size = redlen
+    
     
     ## train and validation loaders
-    traindata = RaygunData(fastafile = config["trainfasta"],
+    traindata = RaygunData(fastafile = config["train_fasta"],
                            alphabet  = esmalphabet,
-                           model     = esmmodel, 
-                           device    = 0)
+                           maxlength = config["maxlength"],
+                           minlength = config["minlength"])
+    
     trainloader = DataLoader(traindata, 
                              shuffle = True, 
                              batch_size = config["batch_size"],
-                             collate_fn = traindata.collatefn)
-    validdata = RaygunData(fastafile = config["validfasta"],
+                             collate_fn = traindata.collatefn_wo_esm,
+                             num_workers=config["data_workers"],
+                             pin_memory=True, 
+                             persistent_workers=True, 
+                             prefetch_factor=4)
+    
+    validdata = RaygunData(fastafile = config["valid_fasta"],
                            alphabet  = esmalphabet,
-                           model     = esmmodel,
-                           device    = 0)
+                           maxlength = config["maxlength"],
+                           minlength = config["minlength"])
+    
     validloader = DataLoader(validdata, 
-                            shuffle = False,
-                            batch_size = config["batch_size"], 
-                            collate_fn = validdata.collatefn)
+                             shuffle = False,
+                             batch_size = config["batch_size"], 
+                             collate_fn = validdata.collatefn_wo_esm,
+                             num_workers=config["data_workers"],
+                             pin_memory=True, 
+                             persistent_workers=True, 
+                             prefetch_factor=4)
     # Start the training
     
     ## checkpoint
@@ -118,8 +166,9 @@ def main(config: DictConfig):
                         callbacks = [chk_callback],
                         accumulate_grad_batches=config["accumulate_grad_batches"],
                         accelerator="gpu", 
-                        val_check_interval=0.25,
-                        devices=config["devices"], strategy="ddp",
+                        val_check_interval=1/config["per_epoch_val_check"],
+                        devices=config["devices"], 
+                        strategy="ddp_find_unused_parameters_true",
                         max_epochs=config["epoch"], 
                         gradient_clip_val = config["clip"],
                         gradient_clip_algorithm = "value")

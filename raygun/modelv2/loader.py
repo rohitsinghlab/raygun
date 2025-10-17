@@ -34,7 +34,6 @@ class RaygunData(Dataset):
         """
         assert precomputed == False or embeddingfolder is not None, "precomputed is True but the `embeddingfolder` is not provided"
         assert save == False or embeddingfolder is not None, "save is True but the save location,  denoted by `embeddingfolder` is None"
-        assert precomputed == True or model is not None, "precomputed is False, but the esm model is not provided"
         assert alphabet is not None, "ESM alphabet is not provided"
         ## NOTE: ESM-2 device location and `device` should be the same
         self.device          = device
@@ -65,22 +64,25 @@ class RaygunData(Dataset):
     def __getitem__(self, idx):
         return self.sequences[idx]
     
-    def collatefn(self, batches):
+    def collatefn_wo_esm(self, batches):
         ids, seqs  = zip(*batches)
         lengths    = [len(seq) for seq in seqs]
         maxlen     = max(lengths)
         nbatch     = len(lengths)
         mask       = torch.arange(maxlen, dtype = int).unsqueeze(0).expand(nbatch, maxlen) < torch.tensor(lengths, dtype = int).unsqueeze(1)
-        embeddings = []
-        # TOFIX: sometimes batch_converter adds padding token in the middle of the sequence
         tokens = []
         for b in batches:
             _, _, toks = self.bc([b]) # [1, seqlen]
             tokens.append(toks.squeeze(0))
         tokens       = pad_sequence(tokens, padding_value = 1)
         tokens       = rearrange(tokens, "s b -> b s")
-
-        tokens       = tokens.to(self.device)
+        return tokens, mask, batches
+    
+    
+    def collatefn(self, batches):
+        embeddings            = []
+        tokens, mask, batches = self.collatefn_wo_esm(batches)
+        tokens                = tokens.to(self.device)
         if self.precomputed:
             for idx in ids:
                 efile  = f"{self.embeddingfolder}/{idx}.h5"

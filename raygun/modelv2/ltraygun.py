@@ -16,7 +16,8 @@ import numpy as np
 MINALLOWEDLENGTH = 50
 
 class RaygunLightning(L.LightningModule):
-    def __init__(self, raygun, lr = 1e-3, 
+    def __init__(self, raygun, esmmodel,
+                lr = 1e-3, 
                 crossentropyloss = 1., 
                 reconstructionloss = 1., 
                 replicateloss = 1.,
@@ -24,8 +25,9 @@ class RaygunLightning(L.LightningModule):
                 traininglog = "traininglog.txt",
                 finetune = False):
         super().__init__()
-        self.model  = raygun
-        self.lr     = lr
+        self.model            = raygun
+        self.esmmodel         = esmmodel
+        self.lr               = lr
         self.crossentropyloss = crossentropyloss
         self.reconstructloss  = reconstructionloss
         self.replicateloss    = replicateloss
@@ -53,6 +55,11 @@ class RaygunLightning(L.LightningModule):
         self.averagingwindow  = 500
         self.std_threshold    = 15
         self.finetune         = finetune
+        
+    def on_save_checkpoint(self, checkpoint):
+        keys_to_remove = [k for k in checkpoint["state_dict"].keys() if "esmmodel" in k]
+        for k in keys_to_remove:
+            checkpoint["state_dict"].pop(k)
 
     def log_error(self, batch, loss):
         idx, seq       = zip(*batch)
@@ -91,20 +98,32 @@ class RaygunLightning(L.LightningModule):
                 "freq"     : 1
             },
         }
-
+    
+    def get_esm_embeddings(self, batch):
+        tokens, mask, binfo    = batch
+        with torch.no_grad():
+            embeddings = self.esmmodel(tokens, repr_layers = [33], 
+                                    return_contacts = False)["representations"][33]
+            embeddings      = embeddings[:, 1:-1, :] # remove the start token
+        tokens              = tokens[:, 1:]
+        tokens[tokens == 2] = 1
+        tokens              = tokens[:, :-1]
+        return tokens, embeddings, mask, binfo
+            
+        
     def training_step(self, batch, batch_idx):
         """
         token, embedding and mask should not contain the begin and end tokens
         """
-        tokens, e, mask, binfo = batch
+        tokens, e, mask, binfo = self.get_esm_embeddings(batch)
         bshape, seq_, _        = e.shape
         if mask is None:
             assert bshape == 1, "Batch is larger than 1 but no mask provided"
             ## required when replicateloss > 0
-            newlengths = torch.randint(MINALLOWEDLENGTH, seq_, [1])
+            newlengths = torch.randint(MINALLOWEDLENGTH, seq_+1, [1])
         else:
             lengths    = mask.sum(dim = 1)
-            newlengths = torch.concat([torch.randint(MINALLOWEDLENGTH, l, [1]) 
+            newlengths = torch.concat([torch.randint(MINALLOWEDLENGTH, l+1, [1]) 
                          for l in lengths]) 
         tloss = 0
         if self.crossentropyloss > 0:
@@ -163,7 +182,7 @@ class RaygunLightning(L.LightningModule):
         return
 
     def validation_step(self, batch, batch_idx):
-        tokens, e, mask, _ = batch
+        tokens, e, mask, _ = self.get_esm_embeddings(batch)
         payload            = self.model(e, mask = mask)
         result             = payload["reconstructed_embedding"]
         mem                = payload["fixed_length_embedding"]
@@ -251,7 +270,8 @@ class RaygunLightning(L.LightningModule):
         for p, q in zip(true, predicted):
             try:
                 blosum_c_score = self.blosummat.loc[p.upper(), 
-                                                    q.upper()] # if no p and q, this triggers exception
+                                                    q.upper()] 
+                # if no p and q, this triggers exception
                 blosum_max += self.blosummat.loc[p.upper(), 
                                                  p.upper()]
                 blosum_curr += blosum_c_score

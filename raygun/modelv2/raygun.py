@@ -59,7 +59,7 @@ class RaygunEncoder(nn.Module):
             reduced = self.reduction(x, mask = mask, getstd = False)
         return reduced
 
-    def forward(self, x, mask = None, noise = None):
+    def forward(self, x, mask = None, noise = None, add_at_first_only=True):
         """
         If error_c is provided, noise component is incorporated into the 
         fixed-dimensional representation. 
@@ -68,7 +68,8 @@ class RaygunEncoder(nn.Module):
         residues = [enc]
         for mod in self.encoders:
             xresidue = mod(x, mask = mask)
-            residue  = mod(self.reduce(xresidue, mask = mask, noise = noise)) # 
+            residue  = mod(self.reduce(xresidue, mask = mask, 
+                                       noise = None if add_at_first_only else noise)) # 
             x        = x + xresidue
             residues.append(residue)
 
@@ -152,7 +153,8 @@ class Raygun(nn.Module):
         self.alphtotoks  = {'<cls>': 0, '<pad>': 1, '<eos>': 2, '<unk>': 3, 'L': 4, 'A': 5, 'G': 6, 'V': 7, 'S': 8, 'E': 9, 'R': 10, 'T': 11, 'I': 12, 'D': 13, 'P': 14, 'K': 15, 'Q': 16, 'N': 17, 'F': 18, 'Y': 19, 'M': 20, 'H': 21, 'W': 22, 'C': 23, 'X': 24, 'B': 25, 'U': 26, 'Z': 27, 'O': 28, '.': 29, '-': 30, '<null_1>': 31, '<mask>': 32}
         self.esmalphdict = {i:k for k, i in self.alphtotoks.items()}
 
-    def get_sequence_from_logits(self, logits, lengths):
+    def get_sequence_from_logits(self, logits, lengths,
+                                temperature=None, include_valid_only=True):
         batch, seq, _ = logits.shape
         if batch == 1:
             assert isinstance(lengths, int) or lengths.shape[0] == 1, "batch=1 but multiple lengths provided"
@@ -160,13 +162,28 @@ class Raygun(nn.Module):
                 lengths = [lengths]
         else:
             assert len(lengths.shape) == 1 and lengths.shape[0] == batch, "batch size and `lengths` dimension should be the same"
+        if include_valid_only:
+            # include part of the tokens only corresponding to valid AAs
+            toks_to_accept = list(range(4, 24))
+        else:
+            toks_to_accept = list(range(4, 29))
+        alphdict       = {i: self.esmalphdict[k] for i, k in 
+                             enumerate(toks_to_accept)}
+        
+        logits         = logits[:, :, toks_to_accept]
+        
         output_seqs   = []
         with torch.no_grad():
             for idx, length in enumerate(lengths):
                 logit   = logits[idx, :length, :]
-                ptokens = torch.argmax(logit, dim = -1).cpu().numpy().tolist()
-                pseqs   = "".join([self.esmalphdict[t] if t in set(range(4, 29)) else "X" 
-                                  for t in ptokens])
+                if temperature is None: 
+                    # equivalent to temperature 0
+                    ptokens = torch.argmax(logit, dim = -1).cpu().numpy().tolist()
+                else:
+                    assert isinstance(temperature, float) and temperature > 0, "temperature should be float and > 0"
+                    ps      = torch.softmax(logit / temperature, dim=-1)
+                    ptokens = torch.multinomial(ps, num_samples=1).squeeze().cpu().numpy().tolist()
+                pseqs   = "".join([alphdict[t] for t in ptokens])
                 output_seqs.append(pseqs)
         return output_seqs
 
@@ -180,7 +197,9 @@ class Raygun(nn.Module):
                 target_lengths = None, 
                 noise = None, 
                 token = None, 
-                return_logits_and_seqs = False):
+                return_logits_and_seqs = False, 
+                temperature=None, 
+                include_valid_only=True):
         """
         Arguments:
         x    -> [batch, seq, dim]: ESM-2 650M embedding
@@ -215,5 +234,7 @@ class Raygun(nn.Module):
                                         tok, ignore_index = 1)
             result["ce_loss"] = loss
         if return_logits_and_seqs:
-            result["generated-sequences"] = self.get_sequence_from_logits(logits, lengths)
+            result["generated-sequences"] = self.get_sequence_from_logits(logits, lengths, 
+                                                                          temperature=temperature, 
+                                                                          include_valid_only=include_valid_only)
         return result

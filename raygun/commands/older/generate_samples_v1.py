@@ -31,6 +31,13 @@ from Bio.Align import substitution_matrices
 import shlex
 import logging
 
+def set_seed(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 console_handler = logging.StreamHandler()
@@ -219,13 +226,18 @@ def main():
     logger.info(f"Penalizerepeats set to {config.penalizerepeats}.")
     logger.info(f"Length-agnostic PLL filtering activated. Filter ratio: {config.filter_ratio_with_pll}")
     logger.info(f"Sample fasta file: {config.templatefasta}")
+    
+    if hasattr(config, "seed"):
+        set_seed(config.seed)
+    
     esmmodel, esmalphabet = esm.pretrained.esm2_t33_650M_UR50D()
     
     # if there is already a finetuned model, use that by setting the model URL in `finetuned_model_loc`.
     if hasattr(config, "finetuned_model_checkpoint"):
         logger.info(f"Loading the checkpoint from {config.finetuned_model_checkpoint}.")
         checkpoint = torch.load(config.finetuned_model_checkpoint, 
-                                map_location = torch.device(config.device))
+                                map_location = torch.device(config.device), 
+                               weights_only=False)
         hyparams = checkpoint["model_hyperparams"]
         model = Raygun(dim = hyparams["dim"],
                       convkernel = hyparams["convkernel"],

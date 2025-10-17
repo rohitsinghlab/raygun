@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "raygun"
+version = "0.2.5"
+description = "Protein Redesign using Raygun"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Kapil Devkota", email = "kapil.devkota@duke.edu" }]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+dependencies = [
+  "numpy",
+  "pandas",
+  "torch",         # consider pinning or moving to an extra if wheels are an issue
+  "fair-esm",
+  "tqdm",
+  "biopython",
+  "h5py",
+  "einops",
+  "pyyaml",
+  "hydra-core",
+  "lightning",
+  "typer",
+]
+
+[project.urls]
+Homepage = "https://github.com/rohitsinghlab/raygun"
+
+# console scripts (equivalent to your entry_points)
+[project.scripts]
+raygun-sample-single = "raygun.commands.generate_samples_single:main"
+raygun-sample-multiple = "raygun.commands.generate_samples_multiple:main"
+raygun-train = "raygun.commands.train:main"
+
+# Tell setuptools how to find your package (repo-root layout, not src/)
+[tool.setuptools.packages.find]
+include = ["raygun*"]
+exclude = ["tests*", "docs*", "examples*"]
+
+# Optional: dev extras (handy for contributors/CI)
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "ruff",
+  "black",
+  "mypy",
+  "build",
+  "twine",
+]
+  
+# Optional: style/tooling configs right here
+[tool.black]
+line-length = 100
+
+[tool.ruff]
+line-length = 100
+select = ["E","F","I","UP"]
+ignore = ["E501"]  # if you prefer letting black handle long lines
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+ignore_missing_imports = true
