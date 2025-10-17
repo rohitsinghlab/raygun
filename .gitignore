@@ -4,5 +4,5 @@ __pycache__/
 *backup*
 build/
 raygun.egg-info/
-data/
-dist/
+
+
