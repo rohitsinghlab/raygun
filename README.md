@@ -123,7 +123,7 @@ pip install git+https://github.com/rohitsinghlab/raygun.git
 
 ### Available models 
 
-Three Raygun models are currently available for users.
+Four Raygun models are currently available for users.
 
 | model name          | Trained on         | Release date | Version  |
 |---------------------|--------------------|--------------|----------|
