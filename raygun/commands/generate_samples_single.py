@@ -3,12 +3,13 @@
 # This code is available under the terms of the license available at https://github.com/rohitsinghlab/raygun
 import argparse
 import sys
+import warnings
 from raygun.modelv2.raygun import Raygun
 from raygun.modelv2.esmdecoder import DecoderBlock
 from raygun.modelv2.loader import RaygunData
 from raygun.modelv2.ltraygun import RaygunLightning
 from raygun.modelv2.training import training
-from raygun.pretrained import raygun_4_4mil_800M
+import raygun.pretrained as pretrained
 from raygun.pll import get_PLL, penalizerepeats
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -23,6 +24,7 @@ import itertools
 import json
 import random
 import re
+import warnings
 from Bio.Seq import Seq
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
@@ -50,9 +52,9 @@ def get_params():
                         help = "Template fasta containing a single record. For more than one records, use `generate_samples_multiple.py`")
     parser.add_argument("sample_out_folder", 
                         help = "Output folder")
-    parser.add_argument("--checkpoint", 
-                        default = None, 
-                       help="Checkpoint")
+    parser.add_argument("--model", choices=["2.2M", "4.4M", "8.8M"], 
+                        default = "8.8M",
+                       help = "The Raygun model selected")
     parser.add_argument("--minlength", type = int, required = True,
                         help = "Minimum length")
     parser.add_argument("--maxlength", type = int, required = True,
@@ -73,12 +75,29 @@ def get_params():
                        help = "If true, then penalize the repeats.")
     parser.add_argument("--finetune", action = "store_true", default = False, 
                        help = "If true, then perform finetuning before generation. Only use in rare circumstances where the off-the-shelf sequence identity is relatively small. (<0.9)")
-    parser.add_argument("--invalid-aa-penalty", default=5.0, type=float, help="Penalty for generating Xs in the sequence.")
-    parser.add_argument("--finetune-trainf", help = "Finetune train fasta file. Needed only when finetune is set to true")
-    parser.add_argument("--finetune-validf", help = "Finetune valid fasta file. Needed only when finetune is set to true")
-    parser.add_argument("--finetune-epochs", default=10, type=int, help="How many epochs to finetune. Used only when finetune set to true")
-    parser.add_argument("--finetune-lr", default=1e-5, type=float, help="Finetune learning rate. Used only when finetune set to true")
-    parser.add_argument("--finetune-bsize", default=2, type=int, help="Finetune batch size. Used only when finetune set to true")
+    parser.add_argument("--invalid-aa-penalty", default=5.0, 
+                        type=float, help="Penalty for generating Xs in the sequence.")
+    parser.add_argument("--finetune-trainf", 
+                        help = "Finetune train fasta file. Needed only when finetune is set to true")
+    parser.add_argument("--finetune-validf", 
+                        help = "Finetune valid fasta file. Needed only when finetune is set to true")
+    parser.add_argument("--finetune-epochs", default=10, 
+                        type=int, help="How many epochs to finetune. Used only when finetune set to true")
+    parser.add_argument("--finetune-lr", default=1e-5, 
+                        type=float, help="Finetune learning rate. Used only when finetune set to true")
+    parser.add_argument("--finetune-bsize", default=2, 
+                        type=int, help="Finetune batch size. Used only when finetune set to true")
+    
+    parser.add_argument("--checkpoint", default = None, 
+                        help="The checkpoint file. Specify it only if the user has a pre-trained Raygun available locally and want to utilize it for sampling.")
+    
+     # only required if checkpoint is not None
+    parser.add_argument("--checkpoint_encoders", default=12,
+                        help="No of checkpoint encoders")
+     # only required if checkpoint is not None
+    parser.add_argument("--checkpoint_decoders", default=12, 
+                        help="No of checkpoint decoders")
+    
     configs = parser.parse_args()
     if configs.device < 0:
         configs.device = "cpu" 
@@ -107,10 +126,43 @@ def get_cycles(embedding, finallength, model, nratio,
             embedcycle = model.encoder(embedcycle) # do not add noise here
             changedseq = model.get_sequences_from_fixed(embedcycle, finallength)[0]
     return changedseq
+
+
+def get_model_(mod, checkpoint=None, 
+               checkpoint_encoders=12, 
+               checkpoint_decoders=12, 
+               esmmodel=None):
+    # check first it checkpoint provided
+    if checkpoint is not None:
+        rmod     = Raygun(numencoders=checkpoint_encoders, 
+                         numdecoders=checkpoint_decoders, 
+                         fixed_esm_batching=True)
+        with warnings.catch_warnings(record=True) as w:
+            raymodel = RaygunLightning.load_from_checkpoint(checkpoint, 
+                                                            raygun=rmod, 
+                                                            esmmodel=esmmodel,
+                                                            strict=False)
+        return raymodel
+    # if checkpoint not provided, return the default pretrained
+    if mod == "2.2M":
+        return pretrained.raygun_2_2mil_800M(return_lightning_module=True)
+    elif mod == "4.4M":
+        return pretrained.raygun_4_4mil_800M(return_lightning_module=True)
+    elif mod == "8.8M":
+        return pretrained.raygun_8_8mil_800M(return_lightning_module=True)
+    raise Exception(f"Model {mod} is invalid.")
+
+
     
 def get_model(config, esmmodel, esmalph):
     logging.info(f"Loading the raygun model `raygun_4_4mil_800M`")
-    raymodel = raygun_4_4mil_800M(return_lightning_module=True)
+    mod        = config["model"]
+    checkpoint = config["checkpoint"]
+    raymodel = get_model_(mod, checkpoint=checkpoint,
+                          checkpoint_encoders=config["checkpoint_encoders"],
+                          checkpoint_decoders=config["checkpoint_decoders"],
+                          esmmodel=esmmodel)
+    
     if config["finetune"]:
         ep     = config["finetune_epochs"]
         tfasta = config["finetune_trainf"]
@@ -121,19 +173,12 @@ def get_model(config, esmmodel, esmalph):
         
         assert config["device"] >= 0, "Finetune set to true, but no GPU provided"
         
-        logger.info(f"Finetune set to true. Starting finetuning for {ep} epochs, with lr={lr} on train:{tfasta} and valid:{vfasta}.")
-        checkpoint = training(raymodel, esmmodel, esmalph, 
-                             tfasta, vfasta, outdir, lr=lr, 
-                             epoch=ep, batchsize=bsize)
-        raymodel.load_state_dict(checkpoint)
-        del checkpoint  
-    elif config["checkpoint"] is not None:
-        checkpoint = torch.load(config["checkpoint"], weights_only=True)
-        raymodel.load_state_dict(checkpoint["state_dict"], strict=False)
-        del checkpoint
+        logger.info(f"Finetune set to true. Starting finetuning for {ep} epochs, with lr={lr} on train:{tfasta} and valid:{vfasta}. Saving model to {outdir}")
+        raymodel = training(raymodel, esmalph, 
+                            tfasta, vfasta, outdir, lr=lr, 
+                            epoch=ep, batchsize=bsize)
     return raymodel.model
         
-
 def main():
     config = get_params()
     logger.info("Started the Raygun generation process")

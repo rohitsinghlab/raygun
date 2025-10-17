@@ -5,14 +5,15 @@ import lightning as L
 from lightning.pytorch.callbacks import ModelCheckpoint
 from pathlib import Path
 import os
+import warnings
 import torch
 
-def training(ltmodel, esmmodel, esmalphabet, 
+def training(ltmodel, esmalphabet, 
              trainfasta, validfasta, outfld, 
              devices=1, clip=0.001, lr=1e-4, 
              epoch=5, batchsize=2, finetune=True,
              delete_checkpoint_after_loading = True):
-    Path(outfld).mkdir(exist_ok=True)
+    os.makedirs(outfld, exist_ok=True)
     ltmodel.lr          = lr
     ltmodel.finetune    = finetune
     ## starting epoch
@@ -20,24 +21,24 @@ def training(ltmodel, esmmodel, esmalphabet,
     ltmodel.traininglog = f"{outfld}/traininglog.txt"
     ltmodel.log_wandb   = False
     
+    esmmodel            = ltmodel.esmmodel
+    
     ## train loaders
     traindata = RaygunData(fastafile    = trainfasta,
                            alphabet     = esmalphabet,
-                           model        = esmmodel, 
-                           device       = 0)
+                           model        = esmmodel)
     trainloader = DataLoader(traindata, 
                              shuffle    = False, 
                              batch_size = batchsize,
-                             collate_fn = traindata.collatefn)
+                             collate_fn = traindata.collatefn_wo_esm)
     ## validation loaders
     validdata = RaygunData(fastafile    = validfasta,
                            alphabet     = esmalphabet,
-                           model        = esmmodel,
-                           device       = 0)
+                           model        = esmmodel)
     validloader = DataLoader(validdata, 
                             shuffle    = False,
                             batch_size = batchsize, 
-                            collate_fn = validdata.collatefn)
+                            collate_fn = validdata.collatefn_wo_esm)
     
     chk_callback = ModelCheckpoint(
                         monitor           = "val_blosum_ratio",
@@ -56,14 +57,21 @@ def training(ltmodel, esmmodel, esmalphabet,
                         gradient_clip_val       = clip,
                         gradient_clip_algorithm = "value")
     
-    trainer.fit(ltmodel.to(0), 
+    trainer.fit(ltmodel, 
                 trainloader, 
                 validloader)
+    
     chkptloc = [ckpt for ckpt in Path(outfld).iterdir() 
                if ckpt.suffix == ".ckpt"][0]
     
-    new_checkpoint = torch.load(chkptloc, weights_only=True)["state_dict"]
+    # load from the checkpoint
+    with warnings.catch_warnings(record=True) as w:
+        trained_ltmodel = RaygunLightning.load_from_checkpoint(chkptloc,
+                                                              raygun=ltmodel.model,
+                                                              esmmodel=ltmodel.esmmodel,
+                                                              strict=False)
+    
     if delete_checkpoint_after_loading:
         os.remove(chkptloc)
     
-    return new_checkpoint
+    return trained_ltmodel
