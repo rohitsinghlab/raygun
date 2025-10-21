@@ -17,7 +17,7 @@ from einops import repeat, rearrange, reduce
 from einops.layers.torch import Rearrange
 from raygun.modelv3.esmdecoder import DecoderBlock
 from raygun.modelv3.model_utils import Block, BlockP
-from raygun.modelv3.change import Change_length
+from raygun.modelv3.change_length import Change_length
 
 class RaygunEncoder(nn.Module):
     def __init__(self, dim = 1280, reduction = 50,
