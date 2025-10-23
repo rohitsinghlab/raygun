@@ -88,7 +88,8 @@ The thing that Raygun seems to do well is to preserve the general structure and 
 ### Requirements 💻
 Raygun has a few package requirements: `numpy`,
 `pandas`, `fair-esm`, `pyyaml`, `h5py`, `einops` and `torch`
-(the version suitable for your GPU). We verified that our model works on
+(the version suitable for your GPU). Installation should take less than a minute if all the dependencies are satisfied. 
+We verified that our model works on
 A100 and A6000 GPUs, for the following specifications:
 -   python=3.11
 -   fair-esm=2.0.0
@@ -212,7 +213,7 @@ We also additionally provide two command-line APIs `raygun-sample-single` and `r
 
 After the raygun package has been installed, you can use it to generate
 samples using the `raygun-sample-single` command.  For most users, 
-`raygun-sample-single` should be all you need.
+`raygun-sample-single` should be all you need. A single generation should take about 0.3 secs on an A100 GPU.
 
 ~~We strongly recommend that the user first fine-tune the model on the
 target sequence or a set of related sequences.~~
