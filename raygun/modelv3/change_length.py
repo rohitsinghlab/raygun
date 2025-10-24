@@ -139,11 +139,11 @@ class Change_length(nn.Module):
 
         if getstd:
 
-            return padded_out, out_mask, std_out
+            return padded_out, std_out
 
 
-
-        return padded_out, out_mask
+        return padded_out
+        
 
 
 #generalised class - can be modified to output original plus stdev/var matrices and noise separately if desired

@@ -53,10 +53,10 @@ class RaygunEncoder(nn.Module):
         """
         batch, _, _ = x.shape
         if noise is not None:
-            redmean, redstd = self.reduction(x, mask = mask, getstd = True)
+            redmean, redstd = self.reduction(x, mask = mask, getstd = True) #changed
             reduced = redmean + torch.randn_like(redstd, device = x.device) * redstd * noise
         else:
-            reduced = self.reduction(x, mask = mask, getstd = False)
+            reduced = self.reduction(x, mask = mask, getstd = False) #changed
         return reduced
 
     def forward(self, x, mask = None, noise = None, add_at_first_only=True):
@@ -107,7 +107,7 @@ class RaygunDecoder(nn.Module):
         """
         Decoder is entirely deterministic. No noise added here.
         """
-        out, _ = self.repetition(encoding, finallength=finallengths)
+        out = self.repetition(encoding, finallength=finallengths)
         # construct different encoding replicates
         ereplicates = []
         ereplicates.append(encoding)
