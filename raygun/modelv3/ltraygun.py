@@ -13,7 +13,7 @@ import logging
 from Bio.Align import substitution_matrices
 import numpy as np
 
-MINALLOWEDLENGTH = 50
+MINALLOWEDLENGTH = 10
 
 class RaygunLightning(L.LightningModule):
     def __init__(self, raygun, esmmodel,
