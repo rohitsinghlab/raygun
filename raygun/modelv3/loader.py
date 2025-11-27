@@ -16,11 +16,12 @@ from einops import rearrange
 from Bio import SeqIO
 
 class RaygunData(Dataset):
-    def __init__(self, fastafile, alphabet, model = None,
+    def __init__(self, fastafile, alphabet=None, model = None,
                  precomputed = False, save = False,
                  embeddingfolder = None, 
                  device = "cpu", no_records = -1,
-                 maxlength=1000, minlength=50):
+                 maxlength=1000, minlength=50,
+                 batch_preparer=None):
         """
         parameters:
         model, alphabet => ESM-2 650M model and alphabet; ensure that it is in eval mode
@@ -34,14 +35,19 @@ class RaygunData(Dataset):
         """
         assert precomputed == False or embeddingfolder is not None, "precomputed is True but the `embeddingfolder` is not provided"
         assert save == False or embeddingfolder is not None, "save is True but the save location,  denoted by `embeddingfolder` is None"
-        assert alphabet is not None, "ESM alphabet is not provided"
+        # assert alphabet is not None, "ESM alphabet is not provided"
         ## NOTE: ESM-2 device location and `device` should be the same
         self.device          = device
 
         self.fastafile = fastafile
         self.model     = model
         self.alphabet  = alphabet
-        self.bc        = self.alphabet.get_batch_converter()
+
+        if self.alphabet is not None:
+            self.bc        = self.alphabet.get_batch_converter()
+        else: 
+            self.bc        = None
+
         self.records   = list(SeqIO.parse(fastafile, "fasta"))
         self.sequences = [(rec.id, str(rec.seq)) for rec in self.records if 
                          len(rec.seq) <= maxlength and len(rec.seq) >= minlength]
@@ -57,6 +63,7 @@ class RaygunData(Dataset):
         self.no_records      = no_records
         self.embeddingfolder = embeddingfolder
         self.precomputed     = precomputed
+        self.batch_preparer  = batch_preparer
     
     def __len__(self):
         return self.no_records
@@ -107,3 +114,34 @@ class RaygunData(Dataset):
 
         return tokens[:, :-1].cpu(), embeddings.cpu(), mask, batches
 
+    def collatefn_with_e1(self, samples):
+        """
+        samples: list of raw sequences or dicts containing sequence strings.
+        Returns dict with input_ids, attention_mask, lengths, raw.
+        """
+        seqs = []
+        for s in samples:
+            if isinstance(s, str):
+                seqs.append(s)
+            elif isinstance(s, dict):
+                seqs.append(s.get("seq") or s.get("sequence") or s.get("raw_seq") or next(iter(s.values())))
+            else:
+                seqs.append(str(s))
+
+        # encode using fast tokenizer backend
+        encoded = self.batch_preparer.tokenizer.encode_batch(seqs)
+        max_len = max(len(e.ids) for e in encoded)
+        input_ids = torch.full((len(encoded), max_len), self.batch_preparer.pad_token_id, dtype=torch.long)
+        attention_mask = torch.zeros_like(input_ids)
+        for i, e in enumerate(encoded):
+            ids = torch.tensor(e.ids, dtype=torch.long)
+            input_ids[i, :len(ids)] = ids
+            attention_mask[i, :len(ids)] = 1
+
+        lengths = attention_mask.sum(dim=1)
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "lengths": lengths,
+            "raw": samples
+        }

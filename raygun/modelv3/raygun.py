@@ -127,7 +127,9 @@ class Raygun(nn.Module):
                  dropout = 0.1,
                  reduction = 50, activation = "gelu",
                  esmdecodertotokenfile = None, 
-                 fixed_esm_batching=False):
+                 fixed_esm_batching=False,
+                 esmmodel = None):
+        
         super(Raygun, self).__init__()
         self.encoder = RaygunEncoder(dim     = dim, 
                                 reduction    = reduction, 
@@ -150,8 +152,14 @@ class Raygun(nn.Module):
             checkpoint = torch.load(esmdecodertotokenfile)
             self.esmdecoder.load_state_dict(checkpoint["model_state"])
             del checkpoint
+        
+        self.esmmodel = esmmodel
+        
         self.alphtotoks  = {'<cls>': 0, '<pad>': 1, '<eos>': 2, '<unk>': 3, 'L': 4, 'A': 5, 'G': 6, 'V': 7, 'S': 8, 'E': 9, 'R': 10, 'T': 11, 'I': 12, 'D': 13, 'P': 14, 'K': 15, 'Q': 16, 'N': 17, 'F': 18, 'Y': 19, 'M': 20, 'H': 21, 'W': 22, 'C': 23, 'X': 24, 'B': 25, 'U': 26, 'Z': 27, 'O': 28, '.': 29, '-': 30, '<null_1>': 31, '<mask>': 32}
         self.esmalphdict = {i:k for k, i in self.alphtotoks.items()}
+
+        self.esmalphabet = getattr(self.esmmodel, "token_to_id", None) or {}
+        self.toktoalphdict = {v: k for k, v in self.esmalphabet.items()}
 
     def get_sequence_from_logits(self, logits, lengths,
                                 temperature=None, include_valid_only=True):
@@ -164,13 +172,13 @@ class Raygun(nn.Module):
             assert len(lengths.shape) == 1 and lengths.shape[0] == batch, "batch size and `lengths` dimension should be the same"
         if include_valid_only:
             # include part of the tokens only corresponding to valid AAs
-            toks_to_accept = list(range(4, 24))
+            toks_to_accept = list(range(8, 32))
         else:
-            toks_to_accept = list(range(4, 29))
+            toks_to_accept = list(range(8, 32))
         alphdict       = {i: self.esmalphdict[k] for i, k in 
                              enumerate(toks_to_accept)}
         
-        logits         = logits[:, :, toks_to_accept]
+        # logits         = logits[:, :, toks_to_accept]
         
         output_seqs   = []
         with torch.no_grad():
@@ -183,7 +191,7 @@ class Raygun(nn.Module):
                     assert isinstance(temperature, float) and temperature > 0, "temperature should be float and > 0"
                     ps      = torch.softmax(logit / temperature, dim=-1)
                     ptokens = torch.multinomial(ps, num_samples=1).squeeze().cpu().numpy().tolist()
-                pseqs   = "".join([alphdict[t] for t in ptokens])
+                pseqs   = "".join([self.toktoalphdict[t] for t in ptokens])
                 output_seqs.append(pseqs)
         return output_seqs
 
