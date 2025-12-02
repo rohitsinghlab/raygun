@@ -70,13 +70,15 @@ class Block(nn.Module):
         
     def forward(self, x, mask = None, species_emb=None):
         x    = rearrange(x, "b n c -> n b c")
-        x, _ = self.encoder(x, self_attn_padding_mask = ~mask if mask is not None else mask) 
+        x, _ = self.encoder(x, self_attn_padding_mask = ~mask 
+                            if mask is not None else mask) 
         x    = rearrange(x, "n b c -> b n c")
         
         if species_emb is not None:
-            c_emb  = torch.concat([species_emb, x.mean(dim=1)])
-            sc, sp = c_emb.unbind(2, dim=1)
-            x      = x * sc.unsqueeze(-1) + sp.unsqueeze(-1)
+            c_emb  = torch.concat([species_emb, x.mean(dim=1)], 
+                                 dim=1)
+            sc, sp = c_emb.chunk(2, dim=1)
+            x      = x * sc.unsqueeze(1) + sp.unsqueeze(1)
 
         x    = self.convblock(x, mask = mask)
         

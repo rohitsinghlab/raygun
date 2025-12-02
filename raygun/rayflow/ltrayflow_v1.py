@@ -26,6 +26,7 @@ def pairwise(seq1, seq2):
 
 class RayFlowLightning(L.LightningModule):
     def __init__(self, raygun, esmmodel,
+                 rfdenoiser, 
                  no_species,
                  lr = 1e-3, 
                  crossentropyloss = 1., 
@@ -35,12 +36,15 @@ class RayFlowLightning(L.LightningModule):
                  traininglog = "traininglog.txt",
                  standardlosswt = 1,
                  contrastivewt  = 0.25,
-                 denoisewt      = 0.5, 
+                 denoisewt      = 1, 
                  finetune = False, 
                  function_dim=1000):
         super().__init__()
         self.model            = raygun
         self.esmmodel         = esmmodel
+        self.rfdenoiser       = rfdenoiser
+        
+        assert self.rfdenoiser.sp_st_dim == (1280-function_dim)*50, "Species embeddings mismatch"
         
         self.lr               = lr
         self.crossentropyloss = crossentropyloss
@@ -60,7 +64,9 @@ class RayFlowLightning(L.LightningModule):
                                  'U': 26, 'Z': 27, 'O': 28, '.': 29, '-': 30, '<null_1>': 31, '<mask>': 32}
         self.toktoalphdict    = {k: i for i, k in self.esmalphabet.items()} 
         
+        
         self.embloss          = 0
+        
         
         self.log_wandb        = log_wandb
         self.traininglog      = traininglog
@@ -78,12 +84,52 @@ class RayFlowLightning(L.LightningModule):
         self.finetune         = finetune
         self.margin           = 0.5
         
-        
     def on_save_checkpoint(self, checkpoint):
         keys_to_remove = [k for k in checkpoint["state_dict"].keys() if "esmmodel" in k]
         for k in keys_to_remove:
             checkpoint["state_dict"].pop(k)
+
+    def log_values(self, batch, losses):
+        refb           = batch["reference"]
+        refo           = batch["same_tax_different_ortho"]
+        reft           = batch["same_ortho_different_tax"]
+        outstr         = f"Step {self.global_step}\n"
+        for i in range(len(refb["seq"])):
+            rnm,  onm,  tnm          = (refb["name"][i].rjust(15), 
+                                        refo["name"][i].rjust(15), 
+                                        reft["name"][i].rjust(15))
+            rseq, oseq, tseq         = (refb["seq"][i], 
+                                        refo["seq"][i], 
+                                        reft["seq"][i])
+            rtax, otax, ttax         = (refb["taxids"][i],
+                                        refo["taxids"][i],
+                                        reft["taxids"][i])
             
+            align_o, bar_o, align_r1 = pairwise(oseq, rseq)
+            align_t, bar_t, align_r2 = pairwise(oseq, rseq)
+            
+            outstr                  += f"""Ref   {rnm} | {rtax} | norm {refb['embed'].norm().item():.5f}
+Ortho {onm} | {otax} | norm {refo['embed'].norm().item():.5f}
+Taxa  {tnm} | {ttax} | norm {reft['embed'].norm().item():.5f}
+-------------
+| Alignment |
+-------------
+Ortho    : {align_o}
+         : {bar_o}
+         : {align_r1}
+Ref
+         : {align_r2}
+         : {bar_t}
+Taxa     : {align_t}
+{'-'*100}
+"""
+        with open(self.traininglog, "a") as logf:
+            outstr += "\nLosses: "
+            for k, v in losses.items():
+                outstr += f"\n{k.rjust(40)} : {float(v):.5f}"
+            outstr += "\n" + "#"*100 + "\n"
+            logf.write(outstr)
+        return
 
     def configure_optimizers(self):
         if not self.finetune:
@@ -109,7 +155,6 @@ class RayFlowLightning(L.LightningModule):
             },
         }
     
-    
     def __get_esm_embedding(self, batchmap):
         tokens, mask       = batchmap["tokens"], batchmap["mask"]
         with torch.no_grad():
@@ -121,14 +166,12 @@ class RayFlowLightning(L.LightningModule):
         tokens              = tokens[:, :-1]
         return embeddings, tokens
     
-    
     def add_esm_embeddings(self, batchmaps):
         for k, batchmap in batchmaps.items():
             embeddings, toks   = self.__get_esm_embedding(batchmap)
             batchmap["embed"]  = embeddings
             batchmap["tokens"] = toks
         return
-    
     
     def _train_each_(self, mask, token, e, key, lossmap=None):
         batch, seq_, _ = e.shape
@@ -187,20 +230,20 @@ class RayFlowLightning(L.LightningModule):
         lossspec= F.triplet_margin_loss(refmems, tmems, omems, margin=1, p=2)
         
         # get it from nn embedding
-#         rspemb  = rearrange(self.rfdenoiser.compute_species_embed(taxdict["reference"]), 
-#                             "b (n k) -> b n k", n=50)
-#         ospemb  = rearrange(self.rfdenoiser.compute_species_embed(taxdict["same_ortho_different_tax"]), 
-#                             "b (n k) -> b n k", n=50)
-#         tspemb  = rearrange(self.rfdenoiser.compute_species_embed(taxdict["same_tax_different_ortho"]), 
-#                             "b (n k) -> b n k", n=50)
+        rspemb  = rearrange(self.rfdenoiser.compute_species_embed(taxdict["reference"]), 
+                            "b (n k) -> b n k", n=50)
+        ospemb  = rearrange(self.rfdenoiser.compute_species_embed(taxdict["same_ortho_different_tax"]), 
+                            "b (n k) -> b n k", n=50)
+        tspemb  = rearrange(self.rfdenoiser.compute_species_embed(taxdict["same_tax_different_ortho"]), 
+                            "b (n k) -> b n k", n=50)
 
-#         eloss   = (F.mse_loss(omems  , ospemb) + 
-#                    F.mse_loss(tmems  , tspemb) +
-#                    F.mse_loss(refmems, rspemb))
+        eloss   = (F.mse_loss(omems  , ospemb) + 
+                   F.mse_loss(tmems  , tspemb) +
+                   F.mse_loss(refmems, rspemb))
 
-#         self.log(f"train_c/embedding_contrastive_loss", eloss.item())
+        self.log(f"train_c/embedding_contrastive_loss", eloss.item())
 
-        eloss   = 0 #eloss * self.embloss
+        eloss   = eloss * self.embloss
         
         if lossmap is not None and isinstance(lossmap, dict):
             lossmap["species-contrastive-loss"]  = lossspec.item()
@@ -214,44 +257,16 @@ class RayFlowLightning(L.LightningModule):
         return lossfunc + lossspec + eloss, species_gain, function_gain
     
     
-    def compute_denoising_loss(self, batchmap, 
-                               lossmap):
-        def scs(s1s, s2s):
-            seqid_scs = []
-            for s1, s2 in zip(s1s, s2s):
-                align = parasail.nw_stats_diag_32(s1, s2, 1, 1, 
-                                                  parasail.blosum62)
-                seqid_scs.append(align.matches/align.length)
-            return np.mean(seqid_scs)
-        
-        start_emb, end_emb = [batchmap[k]["embed"] for k in ["reference",
+    def compute_denoising_loss(self, memories, taxmap, lossmap):
+        start_emb, end_emb = [memories[k] for k in ["reference",
                                                    "same_ortho_different_tax"]]
-        start_tax, end_tax = [batchmap[k]["taxonomy"] for k in ["reference",
+        start_tax, end_tax = [taxmap[k] for k in ["reference",
                                                  "same_ortho_different_tax"]]
-        end_toks           = batchmap["same_ortho_different_tax"]["tokens"]
-        end_seqs           = batchmap["same_ortho_different_tax"]["seq"]
-        start_masks        = batchmap["reference"]["mask"]
-        targetlens         = batchmap["same_ortho_different_tax"]["mask"].sum(dim=-1)
-        payload            = self.model(start_emb, 
-                                        start_species=start_tax,
-                                        target_species=end_tax,
-                                        mask=start_masks,
-                                        target_lengths=targetlens,
-                                        token=end_toks,
-                                        return_logits_and_seqs=True)
-        celoss             = payload["ce_loss"]
-        recloss            = F.mse_loss(payload["reconstructed_embedding"],
-                                        end_emb)
-        seq_id             = scs(payload["generated-sequences"],
-                                end_seqs)
-        
-        self.log(f"train/transformed_ce_loss",  celoss.item())
-        self.log(f"train/transformed_rec_loss", recloss.item())
-        self.log(f"train/transformed_seq_id", seq_id)
-        lossmap["transformed_ce_loss"]  = celoss.item()
-        lossmap["transformed_rec_loss"] = recloss.item()
-        lossmap["transformed_seq_id"]   = seq_id
-        return celoss+recloss
+        loss =  self.rfdenoiser.compute_loss(start_emb, start_tax, 
+                                             end_emb, end_tax)
+        self.log(f"train/denoising_loss", loss.item())
+        lossmap["denoising-loss"] = loss.item()
+        return loss
     
     
     def training_step(self, batchmap, batch_idx):
@@ -291,7 +306,8 @@ class RayFlowLightning(L.LightningModule):
                                                                              taxmap, 
                                                                              lossmap)
         ## denoising loss
-        denoisingloss                        = self.compute_denoising_loss(batchmap, 
+        denoisingloss                        = self.compute_denoising_loss(memories, 
+                                                                           taxmap, 
                                                                            lossmap)
         
         
@@ -310,6 +326,7 @@ class RayFlowLightning(L.LightningModule):
         
         self.tlosshistory = self.tlosshistory[-self.averagingwindow:]
         
+        self.log_values(batchmap, lossmap)
         
         self.runid       += 1
         if self.runid < self.coolingtime:

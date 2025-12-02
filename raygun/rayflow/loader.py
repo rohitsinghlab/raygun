@@ -233,7 +233,6 @@ class RaygunContrastiveDataset(Dataset):
     def collatefn(self, batches):
         batches         = list(filter(lambda x : x is not None, 
                                 batches))
-        print(batches)
         if len(batches) == 0:
             return None
         ( prot,  seq,  ortho,  taxv, 

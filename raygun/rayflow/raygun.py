@@ -15,9 +15,10 @@ from esm.model.esm2 import TransformerLayer
 from einops import repeat, rearrange, reduce
 from einops.layers.torch import Rearrange
 from raygun.modelv2.esmdecoder import DecoderBlock
-from raygun.modelv2.model_utils import Block, BlockP
+from raygun.rayflow.model_utils import Block
 from raygun.modelv2.reduction import Reduction
 from raygun.modelv2.repetition import Repetition
+import pickle as pkl
 
 class RaygunEncoder(nn.Module):
     def __init__(self, dim = 1280, reduction = 50,
@@ -45,8 +46,7 @@ class RaygunEncoder(nn.Module):
                            )
 
         self.species_emb = nn.Sequential(
-                            nn.Embedding(max_species, no_dim//4),
-                            nn.Linear(dim//4, dim//2),
+                            nn.Embedding(max_species, dim//2),
                             nn.SiLU(), 
                             nn.Linear(dim//2, dim)
                            )
@@ -78,7 +78,8 @@ class RaygunEncoder(nn.Module):
         If error_c is provided, noise component is incorporated into the 
         fixed-dimensional representation. 
         """
-        assert not ((start_species==None) ^ (end_species==None)), "Both start and end species should either be none of a torch.long array."
+        assert not ((start_species is None) ^ (target_species is None)), "Both start and end species should either be none of a torch.long array."
+        
         if start_species is not None:
             st_emb   = self.species_emb(start_species)
             tgt_emb  = self.species_emb(target_species)
@@ -91,7 +92,7 @@ class RaygunEncoder(nn.Module):
         for mod in self.encoders:
             xresidue = mod(x, mask = mask, species_emb=s_emb)
             residue  = mod(self.reduce(xresidue, mask = mask, 
-                                       noise = (None if add_at_first_only else noise))
+                                       noise = (None if add_at_first_only else noise)),
                            species_emb=s_emb) # 
             x        = x + xresidue
             residues.append(residue)
@@ -150,7 +151,8 @@ class Raygun(nn.Module):
                  dropout = 0.1,
                  reduction = 50, activation = "gelu",
                  esmdecodertotokenfile = None, 
-                 fixed_esm_batching=False):
+                 fixed_esm_batching=False,
+                 max_species=1000):
         super(Raygun, self).__init__()
         self.encoder = RaygunEncoder(dim     = dim, 
                                 reduction    = reduction, 
@@ -158,14 +160,17 @@ class Raygun(nn.Module):
                                 numencoders  = numencoders, 
                                 dropout      = dropout, 
                                 activation   = activation,
-                                nhead        = nhead)
+                                nhead        = nhead,
+                                max_species  = max_species)
         self.decoder = RaygunDecoder(dim     = dim, 
                                  nhead       = nhead, 
                                  convkernel  = convkernel,
                                  numdecoders = numdecoders,
                                  dropout     = dropout, 
                                  activation  = activation)
-
+        self.max_species= max_species
+        self.dim        = dim
+        
         self.esmdecoder = DecoderBlock(dim = dim, 
                                       nhead = 20, 
                                       fixed_batching=fixed_esm_batching)
@@ -175,6 +180,50 @@ class Raygun(nn.Module):
             del checkpoint
         self.alphtotoks  = {'<cls>': 0, '<pad>': 1, '<eos>': 2, '<unk>': 3, 'L': 4, 'A': 5, 'G': 6, 'V': 7, 'S': 8, 'E': 9, 'R': 10, 'T': 11, 'I': 12, 'D': 13, 'P': 14, 'K': 15, 'Q': 16, 'N': 17, 'F': 18, 'Y': 19, 'M': 20, 'H': 21, 'W': 22, 'C': 23, 'X': 24, 'B': 25, 'U': 26, 'Z': 27, 'O': 28, '.': 29, '-': 30, '<null_1>': 31, '<mask>': 32}
         self.esmalphdict = {i:k for k, i in self.alphtotoks.items()}
+        
+    def generate_species_embeddings(self, lmdb_file, hid_emb=50):
+        import lmdb
+        from ete3 import NCBITaxa
+        from sklearn.manifold import MDS
+        
+        def get_key(txn, key):
+            return pkl.loads(txn.get(pkl.dumps(key)))
+        
+        def compute_tax_emb(taxes, hid_emb=50, target_dim=1280):
+            ncbi = NCBITaxa()
+            tree = ncbi.get_topology(taxes)
+
+            distmat = np.zeros((len(taxes), len(taxes)))
+            for i in range(len(taxes)):
+                for j in range(i):
+                    distmat[i, j] = tree.get_distance(str(taxes[i]), str(taxes[j]))
+                    distmat[j, i] = distmat[i, j]
+            tax_emb = MDS(n_components=hid_emb, 
+                          n_init=1, 
+                          dissimilarity="precomputed",
+                          normalized_stress="auto").fit_transform(distmat)
+            # multiply by a random orthogonal mat
+            H       = np.random.randn(target_dim, target_dim)
+            Q, R    = np.linalg.qr(H)
+            Q      *= np.sign(np.diag(R))
+            Q       = Q[:hid_emb, :]
+            return tax_emb @ Q
+
+        env              = lmdb.open(lmdb_file, 
+                                     readonly=True,
+                                     lock=False)
+        with env.begin() as txn:
+            assert self.max_species <= get_key(txn, "#taxonomy?")
+            taxs         = []
+            for idx in range(self.max_species):
+                taxs.append(get_key(txn, ("taxonomy?", int(idx))))
+        
+        weights_np       = compute_tax_emb(taxs, 
+                                          hid_emb=hid_emb, 
+                                          target_dim=self.dim//2)
+        self.encoder.species_emb[0].weight = nn.Parameter(torch.tensor(weights_np,
+                                                                dtype=torch.float32))
+        return weights_np
 
     def get_sequence_from_logits(self, logits, lengths,
                                 temperature=None, include_valid_only=True):
@@ -216,11 +265,14 @@ class Raygun(nn.Module):
             logits = self.esmdecoder(out)
         return self.get_sequence_from_logits(logits, lengths)
     
-    def forward(self, x, mask = None, 
+    def forward(self, x, 
+                start_species=None,
+                target_species=None,
+                mask = None, 
                 target_lengths = None, 
                 noise = None, 
                 token = None, 
-                return_logits_and_seqs = False, 
+                return_logits_and_seqs = False,
                 temperature=None, 
                 include_valid_only=True):
         """
@@ -238,7 +290,10 @@ class Raygun(nn.Module):
         else:
             assert mask is not None, "batch larger than 1 but mask is Null"
             lengths = mask.sum(dim = -1)
-        mem = self.encoder(x, mask = mask, noise = noise)
+        mem = self.encoder(x, mask = mask, 
+                           start_species=start_species,
+                           target_species=target_species,
+                           noise = noise)
         out = self.decoder(mem, lengths)
         
         result = {"fixed_length_embedding": mem, 
