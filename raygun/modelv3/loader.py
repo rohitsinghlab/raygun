@@ -21,6 +21,7 @@ class RaygunData(Dataset):
                  embeddingfolder = None, 
                  device = "cpu", no_records = -1,
                  maxlength=1000, minlength=50,
+                 batch_converter=None,
                  batch_preparer=None):
         """
         parameters:
@@ -43,10 +44,7 @@ class RaygunData(Dataset):
         self.model     = model
         self.alphabet  = alphabet
 
-        if self.alphabet is not None:
-            self.bc        = self.alphabet.get_batch_converter()
-        else: 
-            self.bc        = None
+        self.bc = batch_converter
 
         self.records   = list(SeqIO.parse(fastafile, "fasta"))
         self.sequences = [(rec.id, str(rec.seq)) for rec in self.records if 
