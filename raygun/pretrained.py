@@ -27,7 +27,7 @@ def raygun_2_2mil_800M(return_lightning_module = False, return_esmdecoder = Fals
     If return_esmdecoder is set to true, then the function will return a model that accepts ESM-2 650M embedding and returns the 
     amino acid logits. 
     """
-    updatedrayurl = "https://zenodo.org/records/15578824/files/may30-chkpoint-trained-on-4.4m.ckpt?download=1"
+    updatedrayurl = "https://zenodo.org/records/15447158/files/model-may-16.ckpt?download=1"
     checkpoint    = torch.hub.load_state_dict_from_url(updatedrayurl, progress=True,
                                                    map_location = torch.device("cpu"))
     raymodel      = load_raymodel(checkpoint, fixed_batching=False)
