@@ -246,7 +246,7 @@ class Raygun(nn.Module):
             else:
                 tok   = rearrange(token, "b k -> (b k)")
             loss      = F.cross_entropy(rearrange(logits, "b h k -> (b h) k"), 
-                                        tok, ignore_index = 1)
+                                        tok, ignore_index = 0)
             result["ce_loss"] = loss
         if return_logits_and_seqs:
             result["generated-sequences"] = self.get_sequence_from_logits(logits, lengths, 

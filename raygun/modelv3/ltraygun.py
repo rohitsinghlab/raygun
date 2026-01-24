@@ -74,8 +74,14 @@ class RaygunLightning(L.LightningModule):
         self.averagingwindow  = 500
         self.std_threshold    = 15
         self.finetune         = finetune
-        
+
+
+
     def on_save_checkpoint(self, checkpoint):
+        try:
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
         keys_to_remove = [k for k in checkpoint["state_dict"].keys() if "emodel" in k]
         for k in keys_to_remove:
             checkpoint["state_dict"].pop(k)
@@ -93,9 +99,6 @@ class RaygunLightning(L.LightningModule):
                        + u" \u00B1 " 
                        + f"{running_std}\n")
             logf.write(df.to_string())
-            
-
-    # TODO: Update configure_optimizers to use Adam and to use patience based on training step size
 
     # def configure_optimizers(self):
     #     if not self.finetune:
@@ -120,61 +123,12 @@ class RaygunLightning(L.LightningModule):
     #         },
     #     }
 
-    # def configure_optimizers(self):
-    #     params = self.model.parameters() if not self.finetune else self.model.decoder.parameters()
-
-    #     optimizer = torch.optim.AdamW(
-    #         params,
-    #         lr=self.lr,            # try 1e-3 or 5e-4 (conservative)
-    #         weight_decay=1e-4,     # start small
-    #         betas=(0.9, 0.999),
-    #         eps=1e-8
-    #     )
-
-    #     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-    #         optimizer,
-    #         mode='max',
-    #         factor=0.5,
-    #         patience=3,      # your epochs are long; consider 7-10 if noisy
-    #         min_lr=1e-7
-    #     )
-
-    #     return {
-    #         "optimizer": optimizer,
-    #         "lr_scheduler": {
-    #             "scheduler": scheduler,
-    #             "monitor": "val_blosum_ratio",
-    #             "interval": "epoch",
-    #             "freq": 1
-    #         }
-    #     }
-
-
     def configure_optimizers(self):
-        # optimizer: full model or just decoder when finetuning
         if not self.finetune:
             optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         else:
             optimizer = torch.optim.Adam(self.model.decoder.parameters(), lr=self.lr)
-
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer,
-            mode="max",
-            factor=0.5,
-            patience=3,
-            min_lr=1e-6,
-        )
-
-        lr_scheduler_config = {
-            "scheduler": scheduler,
-            "monitor": "val_blosum_score",
-            "interval": "epoch",
-            "frequency": 1,
-        }
-
-        return {"optimizer": optimizer, "lr_scheduler": lr_scheduler_config}
-
-
+        return optimizer
 
     def get_esm_embeddings(self, batch):
         tokens, mask, binfo    = batch
@@ -227,86 +181,6 @@ class RaygunLightning(L.LightningModule):
         # --- existing beginning: get embeddings from esmmodel/adapter ---
         tokens, e, mask, binfo = self.get_embeddings(batch)
         bshape, seq_, _        = e.shape
-
-        # ---- BEGIN DIAGNOSTIC (paste here) ----
-        if batch_idx == 0:   # only print on first batch to avoid huge logs
-            try:
-                tok_min = int(tokens.min().detach().cpu().item())
-                tok_max = int(tokens.max().detach().cpu().item())
-            except Exception:
-                tok_min, tok_max = None, None
-
-            pad_id = getattr(self, "pad_id", None)
-            bs = tokens.shape[0] if hasattr(tokens, "shape") else None
-            seq_lens = (mask.sum(dim=1).cpu().tolist() if mask is not None else
-                        [(tokens[i] != pad_id).sum().item() for i in range(tokens.shape[0])])
-            print(f"[DEBUG] batch_idx={batch_idx}  batch_size={bs}  emb_shape={tuple(e.shape)}")
-            print(f"[DEBUG] token_id_range = {tok_min} .. {tok_max}  pad_id={pad_id}")
-            print(f"[DEBUG] seq_len stats (min,median,max) = ({min(seq_lens)}, {int(np.median(seq_lens))}, {max(seq_lens)})")
-
-            # pad/mask sanity
-            if pad_id is not None and mask is not None:
-                pads_where_mask_valid = int(((tokens == pad_id) & (mask == 1)).sum().detach().cpu().item())
-                total_pads = int((tokens == pad_id).sum().detach().cpu().item())
-                print(f"[DEBUG] pads_marked_valid={pads_where_mask_valid}  total_pads_in_batch={total_pads}")
-            else:
-                print("[DEBUG] pad/mask check skipped (pad_id or mask is None)")
-
-            # internal zeros in mask (padding inside sequences)
-            if mask is not None:
-                def has_internal_zero(m_row):
-                    seen_zero = False
-                    for v in m_row.cpu().tolist():
-                        if v == 0:
-                            seen_zero = True
-                        if seen_zero and v == 1:
-                            return True
-                    return False
-                internal_zero_count = sum(1 for i in range(mask.shape[0]) if has_internal_zero(mask[i]))
-                print(f"[DEBUG] sequences_with_internal_zeros_in_mask={internal_zero_count}")
-
-            # if any long sequences present, print one example of tokens+mask head for inspection
-            long_thresh = 300
-            if max(seq_lens) > long_thresh:
-                idx_long = int(np.argmax(seq_lens))
-                show_n = min(120, tokens.shape[1])
-                print(f"[DEBUG] example_long_idx={idx_long} len={seq_lens[idx_long]}")
-                print(" tokens_example_head:", tokens[idx_long, :show_n].cpu().tolist())
-                print(" mask_example_head  :", mask[idx_long, :show_n].cpu().tolist() if mask is not None else None)
-
-            # small probe for positional-like attributes (very conservative, non-invasive)
-            for attr in ("config", "cfg", "model_config", "max_position_embeddings", "n_positions", "max_seq_len"):
-                if hasattr(self.model, attr):
-                    val = getattr(self.model, attr)
-                    print(f"[DEBUG] model.{attr} = {val}")
-                    if hasattr(val, "__dict__"):
-                        for k in ("max_position_embeddings", "n_positions", "max_seq_len"):
-                            if hasattr(val, k):
-                                print(f"[DEBUG]   -> {k}: {getattr(val, k)}")
-
-        # ---- END DIAGNOSTIC ----
-
-
-        # # --- DIAGNOSTIC: print token range and decoder class count (safe CPU ops) ---
-        # with torch.no_grad():
-        #     tok_min = int(tokens.min().detach().cpu().item())
-        #     tok_max = int(tokens.max().detach().cpu().item())
-        #     try:
-        #         # try to detect decoder final linear head shape (n_classes)
-        #         lm_head = getattr(self.model, "esmdecoder", None)
-        #         n_classes = None
-        #         if lm_head is not None:
-        #             last = lm_head[-1]
-        #             n_classes = getattr(last, "out_features", None)
-        #     except Exception:
-        #         n_classes = None
-
-        # # Print the diagnostic (Lightning will capture)
-        # # print(f"DEBUG: training_step: token range = {tok_min}..{tok_max}, decoder n_classes = {n_classes}, pad_id = {self.pad_id}")
-
-        # # If we detect an out-of-range label right now, raise a helpful error with values
-        # if n_classes is not None and (tok_min < 0 or tok_max >= n_classes):
-        #     print("ALERT: token ids are outside decoder class range; applying mapping from E1 ids -> decoder ids now.")
 
         # --- MAP E1 token IDs -> decoder alphabet IDs (cached map) ---
         if self.e1:
@@ -361,7 +235,7 @@ class RaygunLightning(L.LightningModule):
 
         if self.crossentropyloss > 0:
             # call model with mapped token ids
-            payload    = self.model(e, mask = mask, token = tokens)
+            payload    = self.model(e, mask = mask, token=tokens_for_loss if self.e1 else tokens)
             result     = payload["reconstructed_embedding"]
             mem        = payload["fixed_length_embedding"]
             crossloss  = payload["ce_loss"]
@@ -403,6 +277,7 @@ class RaygunLightning(L.LightningModule):
             blosumv, blosumr = self.get_blosum_score(result.detach(), tokens.detach())
         self.log("Blosum score", blosumv)
         self.log("Blosum ratio", blosumr)
+        self.log("global_step", float(self.global_step))
 
         # remaining bookkeeping
         self.tlosshistory = self.tlosshistory[-self.averagingwindow:]
@@ -420,90 +295,6 @@ class RaygunLightning(L.LightningModule):
         else:
             self.tlosshistory.append(tloss.item())
             return tloss
-
-
-    # def training_step(self, batch, batch_idx):
-    #     """
-    #     token, embedding and mask should not contain the begin and end tokens
-    #     """
-    #     tokens, e, mask, binfo = self.get_esm_embeddings(batch)
-    #     bshape, seq_, _        = e.shape
-    #     if mask is None:
-    #         assert bshape == 1, "Batch is larger than 1 but no mask provided"
-    #         ## required when replicateloss > 0
-    #         newlengths = torch.randint(MINALLOWEDLENGTH, seq_+1, [1])
-    #     else:
-    #         lengths    = mask.sum(dim = 1)
-    #         newlengths = torch.concat([torch.randint(MINALLOWEDLENGTH, l+1, [1]) 
-    #                      for l in lengths]) 
-    #     tloss = 0
-
-
-
-    #     # map E1 token IDs → Raygun decoder alphabet IDs (prevents CE target-out-of-range)
-    #     if not hasattr(self, "_e1_to_alpha_map"):
-    #         id_to_token = getattr(self.emodel, "id_to_token", None)
-    #         if id_to_token is None:
-    #             tok_to_id = getattr(self.emodel, "token_to_id", {})
-    #             id_to_token = {v: k for k, v in tok_to_id.items()}
-    #         e1_vocab = max(id_to_token.keys()) + 1
-    #         pad_fill = self.pad_id if getattr(self, "pad_id", None) is not None else 0
-    #         mapper = torch.full((e1_vocab,), fill_value=pad_fill, dtype=torch.long)
-    #         tokenstr_to_alphaid = self.esmalphabet if isinstance(self.esmalphabet, dict) else {}
-    #         for e1_id, tokstr in id_to_token.items():
-    #             mapper[e1_id] = tokenstr_to_alphaid.get(tokstr, pad_fill)
-    #         self._e1_to_alpha_map = mapper
-
-    #     tokens = self._e1_to_alpha_map.to(tokens.device)[tokens]
-
-
-
-
-    #     if self.crossentropyloss > 0:
-    #         payload    = self.model(e, mask = mask, token = tokens)
-    #         result     = payload["reconstructed_embedding"]
-    #         mem        = payload["fixed_length_embedding"]
-    #         crossloss  = payload["ce_loss"]
-    #         tloss      = tloss + self.crossentropyloss * crossloss
-    #         self.trainlosses["Cross-Entropy Loss"].append(crossloss.item())
-    #         self.log("Cross-Entropy Loss", crossloss.item() if crossloss.item() < 10 else 10)
-    #     else:
-    #         payload    = self.model(e, mask = mask)
-    #         result     = payload["reconstructed_embedding"]
-    #         mem        = payload["fixed_length_embedding"]
-            
-    #     if self.reconstructloss > 0:
-    #         recloss    = F.mse_loss(result * mask.unsqueeze(-1), e * mask.unsqueeze(-1))
-    #         tloss      = tloss + self.reconstructloss * recloss
-    #         self.trainlosses["Reconstruction Loss"].append(recloss.item())
-    #         self.log("Reconstruction Loss", recloss.item() if recloss.item() < 10 else 10)
-    #     if self.replicateloss > 0:
-    #         decodedemb = self.model.decoder(mem, newlengths)
-    #         reploss    = F.mse_loss(mem, self.model.encoder(decodedemb)) 
-    #         tloss      = tloss + self.replicateloss * reploss 
-    #         self.trainlosses["Replicate Loss"].append(reploss.item())
-    #         self.log("Replicate Loss", reploss.item() if reploss.item() < 10 else 10)
-    #     blosumv, blosumr = self.get_blosum_score(result.detach(), tokens.detach())
-    #     self.log("Blosum score", blosumv)
-    #     self.log("Blosum ratio", blosumr)
-        
-    #     self.tlosshistory = self.tlosshistory[-self.averagingwindow:]
-        
-    #     self.runid       += 1
-    #     if self.runid < self.coolingtime:
-    #         self.tlosshistory.append(tloss.item())
-    #         return tloss
-        
-    #     running_avg = np.mean(self.tlosshistory)
-    #     running_std = np.std(self.tlosshistory)
-        
-    #     if tloss.item() >= running_avg + self.std_threshold * running_std:
-    #         self.log_error(binfo, tloss.item())
-    #         tloss_ = float(tloss.item()) * 0.01
-    #         return tloss / tloss_ * running_avg ## this would ignore the batch
-    #     else:
-    #         self.tlosshistory.append(tloss.item())
-    #         return tloss
 
     def on_train_epoch_end(self):
         logf = f"Completed Training Epoch {self.epoch+1}: "
