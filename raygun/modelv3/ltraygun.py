@@ -39,7 +39,7 @@ class RaygunLightning(L.LightningModule):
         bl                    = substitution_matrices.load("BLOSUM62")
         self.blosummat        = pd.DataFrame(bl, columns = list(bl.alphabet))
         self.blosummat.index  = list(bl.alphabet)
-        self.decodermodel     = raygun.esmdecoder
+        self.decodermodel     = raygun.e1decoder
 
 
         print(e1, " Using e1 T/F")
@@ -352,7 +352,7 @@ class RaygunLightning(L.LightningModule):
             lengths = [n]
         pred_alphs = []
         for i in range(b):
-            logits = self.model.esmdecoder(embeddings[i][None, :lengths[i], :])
+            logits = self.model.e1decoder(embeddings[i][None, :lengths[i], :])
             pred_token = torch.argmax(logits, dim = -1).cpu().numpy()
             pred_alph  = self.convert_tokens_to_alph(pred_token, [lengths[i]])
             pred_alph  = "".join(pred_alph[0])
@@ -377,7 +377,7 @@ class RaygunLightning(L.LightningModule):
         with torch.no_grad():
             true_alph    = self.convert_tokens_to_alph(true_token.cpu().numpy(),
                                                        lengths)
-            logits       = self.model.esmdecoder(embedding)
+            logits       = self.model.e1decoder(embedding)
             pred_tokens  = torch.argmax(logits, dim = -1).cpu().numpy()
             pred_alph    = self.convert_tokens_to_alph(pred_tokens, lengths)
             blcs, blrs   = [], []

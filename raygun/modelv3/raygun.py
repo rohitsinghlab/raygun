@@ -16,6 +16,7 @@ from esm.model.esm2 import TransformerLayer
 from einops import repeat, rearrange, reduce
 from einops.layers.torch import Rearrange
 from raygun.modelv3.esmdecoder import DecoderBlock
+from raygun.modelv3.e1decoder import E1DecoderBlock
 from raygun.modelv3.model_utils import Block, BlockP
 from raygun.modelv3.change_length import Change_length
 
@@ -145,9 +146,15 @@ class Raygun(nn.Module):
                                  dropout     = dropout, 
                                  activation  = activation)
 
-        self.esmdecoder = DecoderBlock(dim = dim, 
-                                      nhead = 20, 
-                                      fixed_batching=fixed_esm_batching)
+        # self.esmdecoder = DecoderBlock(dim = dim, 
+        #                               nhead = 20, 
+        #                               fixed_batching=fixed_esm_batching)
+
+        self.e1decoder = E1DecoderBlock(input_dim=dim,
+                                       num_classes=34,
+                                       dropout=dropout,
+                                       layer_idx=0)
+        
         if esmdecodertotokenfile is not None:
             checkpoint = torch.load(esmdecodertotokenfile)
             self.esmdecoder.load_state_dict(checkpoint["model_state"])
@@ -205,7 +212,7 @@ class Raygun(nn.Module):
     def get_sequences_from_fixed(self, fixedembs, lengths):
         with torch.no_grad():
             out    = self.decoder(fixedembs, lengths)
-            logits = self.esmdecoder(out)
+            logits = self.e1decoder(out)
         return self.get_sequence_from_logits(logits, lengths)
     
     def forward(self, x, mask = None, 
@@ -237,7 +244,7 @@ class Raygun(nn.Module):
                  "reconstructed_embedding": out}
         
         if token is not None or return_logits_and_seqs:
-            logits          = self.esmdecoder(out) #batch, seq, token
+            logits          = self.e1decoder(out) #batch, seq, token
             result["logits"] = logits
             
         if token is not None:
