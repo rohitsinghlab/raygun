@@ -8,15 +8,19 @@ from glob import glob
 import h5py 
 from tqdm import tqdm
 import re
+import random
+from collections import defaultdict
 from io import StringIO
+import pickle
 import pandas as pd
 import os
 import torch
 from einops import rearrange
 from Bio import SeqIO
+from torch.utils.data import BatchSampler
 
 class RaygunData(Dataset):
-    def __init__(self, fastafile, alphabet=None, model = None,
+    def __init__(self, datapath, alphabet=None, model = None,
                  precomputed = False, save = False,
                  embeddingfolder = None, 
                  device = "cpu", no_records = -1,
@@ -40,15 +44,45 @@ class RaygunData(Dataset):
         ## NOTE: ESM-2 device location and `device` should be the same
         self.device          = device
 
-        self.fastafile = fastafile
+        self.datapath = datapath
         self.model     = model
         self.alphabet  = alphabet
 
         self.bc = batch_converter
 
-        self.records   = list(SeqIO.parse(fastafile, "fasta"))
-        self.sequences = [(rec.id, str(rec.seq)) for rec in self.records if 
-                         len(rec.seq) <= maxlength and len(rec.seq) >= minlength]
+        with open(self.datapath, "rb") as f:
+            self.records = pickle.load(f)
+
+        self.sequences = []
+
+        for group_id, df in self.records.items():
+            for _, row in df.iterrows():
+                seq = row["seq"]
+
+                if not (minlength <= len(seq) <= maxlength):
+                    continue
+
+                seq_id = row.get("prot") or row.get("t-seq-id")
+
+                self.sequences.append({
+                    "id": seq_id,
+                    "seq": seq,
+                    "group_id": group_id,
+                })
+
+        self.group_to_indices = defaultdict(list)
+
+        for idx, item in enumerate(self.sequences):
+            gid = item["group_id"]
+            self.group_to_indices[gid].append(idx)
+
+        # Optional: drop tiny groups
+        self.group_to_indices = {
+            gid: idxs
+            for gid, idxs in self.group_to_indices.items()
+            if len(idxs) >= 4
+        }
+
         if precomputed:
             h5exists = lambda x : os.path.exists(f"{embeddingfolder}/{x}.h5")
             self.sequences = [s for s in self.sequences if h5exists(s[0])]
@@ -143,3 +177,40 @@ class RaygunData(Dataset):
             "lengths": lengths,
             "raw": samples
         }
+
+class BatchSampler(BatchSampler):
+    def __init__(
+        self,
+        group_to_indices: dict,
+        batch_size: int = 4,
+        batches_per_epoch: int | None = None,
+        shuffle_groups: bool = True,
+    ):
+        self.group_to_indices = group_to_indices
+        self.batch_size = batch_size
+        self.groups = list(group_to_indices.keys())
+        self.shuffle_groups = shuffle_groups
+
+        # If not specified, define epoch length as "one pass over groups"
+        self.batches_per_epoch = (
+            batches_per_epoch if batches_per_epoch is not None else len(self.groups)
+        )
+
+    def __iter__(self):
+        groups = self.groups.copy()
+        if self.shuffle_groups:
+            random.shuffle(groups)
+
+        n = 0
+        while n < self.batches_per_epoch:
+            gid = random.choice(groups)
+            indices = self.group_to_indices[gid]
+
+            # Sample WITHOUT replacement (groups are large)
+            batch = random.sample(indices, self.batch_size)
+
+            yield batch
+            n += 1
+
+    def __len__(self):
+        return self.batches_per_epoch

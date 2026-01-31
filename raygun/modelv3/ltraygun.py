@@ -75,6 +75,12 @@ class RaygunLightning(L.LightningModule):
         self.std_threshold    = 15
         self.finetune         = finetune
 
+        self.lap_alpha_max = 1e-1     # tune later
+        self.lap_warmup_epochs = 4    # e.g. first 10 epochs
+
+        self.sigma0 = 1.0   # variance floor target
+        self.var_gamma_max = 1e-1  # weight for variance floor loss
+        self.var_warmup_epochs = 4  # e.g. first 10 epochs
 
 
     def on_save_checkpoint(self, checkpoint):
@@ -171,7 +177,27 @@ class RaygunLightning(L.LightningModule):
 
         return tokens, embeddings, attention_mask, binfo
 
-            
+    def laplacian_regularizer(self, z, eps=1e-5):
+        z = self.layer_norm_for_loss(z, eps=eps)
+
+        mu = z.mean(dim=0, keepdim=True)
+        return ((z - mu) ** 2).sum(dim=-1).mean()
+
+    
+    def layer_norm_for_loss(self, z, eps=1e-5):
+        # z: [N, d]
+        mu = z.mean(dim=-1, keepdim=True)
+        var = z.var(dim=-1, unbiased=False, keepdim=True)
+        return (z - mu) / torch.sqrt(var + eps)
+
+
+    def variance_floor(self, z, sigma0=1.0, eps=1e-4, use_ln=True):
+        if use_ln:
+            z = self.layer_norm_for_loss(z)
+
+        std = torch.sqrt(z.var(dim=0, unbiased=False) + eps)
+        return torch.relu(sigma0 - std).pow(2).mean()
+
     
     def training_step(self, batch, batch_idx):
         """
@@ -212,14 +238,6 @@ class RaygunLightning(L.LightningModule):
             mapper = self._e1_to_alpha_map.to(tokens.device)
             tokens_mapped = mapper[tokens]    # same shape as tokens
 
-            # # Optional debug print to see some mapped values (first few)
-            # if batch_idx == 0:
-            #     sample_map_preview = mapper[:min(len(mapper), 20)].tolist()
-            #     print("DEBUG: e1->alpha mapper preview (first 20):", sample_map_preview)
-            #     print("DEBUG: tokens (first row) sample E1 ids:", tokens[0, :10].detach().cpu().tolist())
-            #     print("DEBUG: tokens_mapped (first row) sample alpha ids:", tokens_mapped[0, :10].detach().cpu().tolist())
-
-            # Use tokens_mapped as labels for downstream calls
             tokens_for_loss = tokens_mapped
 
         # --- Now proceed with normal training logic, but make CE loss robust ---
@@ -271,6 +289,23 @@ class RaygunLightning(L.LightningModule):
             self.trainlosses["Replicate Loss"].append(reploss.item())
             self.log("Replicate Loss", reploss.item() if reploss.item() < 10 else 10)
         
+        # regularizers
+        if self.lap_alpha_max > 0:
+            laploss = self.laplacian_regularizer(mem)
+            alpha = self.lap_alpha_max * min(1.0, self.epoch / float(self.lap_warmup_epochs))
+            tloss += alpha * laploss
+
+            self.trainlosses["Laplacian Loss"].append(laploss.item())
+            self.log("Laplacian Loss", laploss.item() if laploss.item() < 10 else 10)
+        
+        if self.sigma0 > 0:
+            varloss = self.variance_floor(mem, sigma0=self.sigma0)
+            gamma = self.var_gamma_max * min(1.0, self.epoch / float(self.var_warmup_epochs))
+            tloss += gamma * varloss
+
+            self.trainlosses["Variance Loss"].append(varloss.item())
+            self.log("Variance Loss", varloss.item() if varloss.item() < 10 else 10)
+        
         if self.e1:
             blosumv, blosumr = self.get_blosum_score(result.detach(), tokens_for_loss.detach())
         else:
@@ -303,6 +338,7 @@ class RaygunLightning(L.LightningModule):
         logging.info(logf)
         self.trainlosses = defaultdict(list)
         self.epoch      += 1
+        print(torch.cuda.memory_summary())
         return
 
     def validation_step(self, batch, batch_idx):
