@@ -10,8 +10,6 @@ import torch.nn.functional as F
 from einops import rearrange
 import math
 from esm.model.esm2 import TransformerLayer
-
-# E1 imports
 from E1.modeling import DecoderLayer
 from E1.config import E1Config
 
@@ -39,15 +37,12 @@ class E1DecoderBlock(nn.Module):
     ):
         super().__init__()
 
-        # Load default E1 config (hidden_size = 4096)
         self.config = E1Config()
 
         self.input_proj = nn.Linear(input_dim, self.config.hidden_size)
 
-        # Single decoder layer (ESM had exactly one TransformerLayer)
         self.decoder = DecoderLayer(self.config, layer_idx)
 
-        # Task head (same shape as esmdecoder)
         self.head = nn.Sequential(
             nn.Linear(self.config.hidden_size, self.config.hidden_size // 4),
             nn.Dropout(p=dropout),
