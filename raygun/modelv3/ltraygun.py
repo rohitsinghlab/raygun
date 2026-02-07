@@ -156,7 +156,8 @@ class RaygunLightning(L.LightningModule):
             except Exception:
                 raise ValueError("Unknown batch format in get_esm_embeddings")
 
-        device = next(self.model.parameters()).device if hasattr(self.model, "parameters") else input_ids.device
+        # device = next(self.model.parameters()).device if hasattr(self.model, "parameters") else input_ids.device
+        device = self.device
         input_ids = input_ids.to(device)
         attention_mask = attention_mask.to(device)
 
