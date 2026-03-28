@@ -50,6 +50,8 @@ class Change_length(nn.Module):
         super().__init__()
         self.eps = eps  # small epsilon for numerical stability
         self.finallength = finallength
+        print("Change length final length")
+        print(self.finallength)
 
 
 

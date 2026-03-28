@@ -368,7 +368,7 @@ class RaygunLightning(L.LightningModule):
         embedding: tensor [batch, seqlen, dim]
         true_token: tensor [batch, seqlen]
         """
-        ## logging.info(f"Tokens shape {true_token.shape}, embed shape {embedding.shape}")
+        # logging.info(f"Tokens shape {true_token.shape}, embed shape {embedding.shape}")
         batch, _, _ = embedding.shape
         lengths     = []
         
@@ -405,3 +405,118 @@ class RaygunLightning(L.LightningModule):
         if blosum_max == 0:
             return blosum_curr, 0.0
         return blosum_curr, blosum_curr / blosum_max
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        """
+        Lightning-native prediction step.
+        Identical precision + vocab handling to training_step.
+        """
+        
+
+
+        tokens, e, mask, binfo = self.get_embeddings(batch)
+
+        # Same forward path as training / validation
+        payload = self.model(
+            e,
+            mask=mask,
+        )
+
+        result             = payload["reconstructed_embedding"]
+
+        blosum_curr, blosum_curr_ratio = self.get_blosum_score(result,
+                                                                tokens)
+
+        print(f"Batch {batch_idx} - Blosum Score: {blosum_curr}, Blosum Ratio: {blosum_curr_ratio}")
+
+        logits = payload["logits"] if "logits" in payload else self.model.e1decoder(
+            payload["reconstructed_embedding"]
+        )
+
+        pred_tokens = torch.argmax(logits, dim=-1)
+
+        # -----------------------------
+        # DEBUG: raw token comparison
+        # -----------------------------
+        if batch_idx == 0:
+            id_to_token = getattr(self.emodel, "id_to_token", None)
+            if id_to_token is None:
+                tok_to_id = getattr(self.emodel, "token_to_id", {})
+                id_to_token = {v: k for k, v in tok_to_id.items()}
+
+            print("\n=== DEBUG RAW TOKENS ===")
+            print("TRUE token ids:", tokens[0, :-1].detach().cpu().tolist())
+            print("TRUE token strs:", [id_to_token.get(t, "?") for t in tokens[0, :-1].cpu().tolist()])
+            print("PRED token ids:", pred_tokens[0, :-1].detach().cpu().tolist())
+            print("PRED token strs:", [id_to_token.get(t, "?") for t in pred_tokens[0, :-1].cpu().tolist()])
+            print("========================\n")
+        
+        print(payload["reconstructed_embedding"].shape, tokens.shape)
+        
+        score = self.get_blosum_score(payload["reconstructed_embedding"], tokens)
+
+        # -----------------------------
+        # 🔑 E1 → AA alphabet mapping (CRITICAL)
+        # -----------------------------
+        if self.e1:
+            if not hasattr(self, "_e1_to_alpha_map"):
+                id_to_token = getattr(self.emodel, "id_to_token", None)
+                if id_to_token is None:
+                    tok_to_id = getattr(self.emodel, "token_to_id", {})
+                    id_to_token = {v: k for k, v in tok_to_id.items()}
+
+                e1_vocab_size = max(id_to_token.keys()) + 1
+                pad_fill = self.pad_id if self.pad_id is not None else 0
+
+                mapper = torch.full(
+                    (e1_vocab_size,),
+                    fill_value=pad_fill,
+                    dtype=torch.long,
+                )
+
+                # token_str → AA-id mapping
+                for e1_id, tokstr in id_to_token.items():
+                    mapper[e1_id] = self.esmalphabet.get(tokstr, pad_fill)
+
+                self._e1_to_alpha_map = mapper
+
+            pred_tokens = self._e1_to_alpha_map.to(pred_tokens.device)[pred_tokens]
+
+        # -----------------------------
+        # Convert to amino-acid strings
+        # -----------------------------
+        lengths = (
+            mask.sum(dim=1).tolist()
+            if mask is not None
+            else [pred_tokens.shape[1]] * pred_tokens.shape[0]
+        )
+
+        pred_tokens_np = pred_tokens.detach().cpu().numpy()
+        mask_np = mask.detach().cpu().numpy() if mask is not None else None
+
+        pred_alph = []
+        for i in range(pred_tokens_np.shape[0]):
+            if mask_np is not None:
+                valid_idx = mask_np[i].astype(bool)
+                toks = pred_tokens_np[i][valid_idx]
+            else:
+                toks = pred_tokens_np[i][:lengths[i]]
+
+            pred_alph.append(
+                [self.toktoalphdict[t] for t in toks]
+            )
+
+
+        outputs = []
+        for i in range(len(pred_alph)):
+            out = {
+                "pred": "".join(pred_alph[i]),
+                "score": score,
+            }
+            if binfo is not None:
+                idx, true_seq = binfo[i]
+                out["id"] = idx
+                out["true"] = true_seq
+            outputs.append(out)
+
+        return outputs

@@ -154,6 +154,8 @@ class Raygun(nn.Module):
                                        num_classes=34,
                                        dropout=dropout,
                                        layer_idx=0)
+
+        # self.e1decoder = E1DecoderBlock()
         
         if esmdecodertotokenfile is not None:
             checkpoint = torch.load(esmdecodertotokenfile)

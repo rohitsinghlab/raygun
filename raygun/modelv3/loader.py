@@ -123,6 +123,8 @@ class RaygunData(Dataset):
                 seqs.append(s)
             elif isinstance(s, dict):
                 seqs.append(s.get("seq") or s.get("sequence") or s.get("raw_seq") or next(iter(s.values())))
+            elif isinstance(s, tuple):
+                seqs.append(s[1])
             else:
                 seqs.append(str(s))
 
