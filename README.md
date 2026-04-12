@@ -258,6 +258,10 @@ raygun-train <train_fasta> <valid_fasta> <model_saveloc> [--checkpoint=<checkpoi
 ```
 Note that this training code is provided as a baseline reference. Any modifications on this code to improve the training procedure is highly encouraged.
 
+## Datasets
+All the sequence data used for training and benchmaking the model (including the additional data used for training the 2.2M model) is available for downloading at [zenodo](https://zenodo.org/records/19546626).
+
+
 ## License
 Everything in this repository is licensed under the CC-BY-NC-SA 4.0 license. In addition to the terms of this license, we grant the following rights:
 
