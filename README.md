@@ -260,7 +260,7 @@ Note that this training code is provided as a baseline reference. Any modificati
 
 ## Datasets
 All the sequence data used for training and benchmaking the model (including the additional data used for training the 2.2M model) is available for downloading at [zenodo](https://zenodo.org/records/19546626).
-
+The Raygun results & the code for generating figures are provided through [figshare](https://doi.org/10.6084/m9.figshare.33107414).
 
 ## License
 Everything in this repository is licensed under the CC-BY-NC-SA 4.0 license. In addition to the terms of this license, we grant the following rights:
