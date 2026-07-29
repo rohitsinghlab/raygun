@@ -133,7 +133,7 @@ Four Raygun models are currently available for users.
 | raygun_2_2mil_800M  | 2.2 mil Uniref50   | May, 2025    |   0.2    |
 | raygun_100k_750M    | 100K Uniref50      | Aug, 2024    |   0.1    |
 
-We highly recommend the latest 800M parameter model that was trained on 2.2 million randomly sampled dataset to be used for generation and sampling.
+We highly recommend the latest 800M parameter model that was trained on 8.8 million randomly sampled dataset to be used for generation and sampling.
 
 Here is how you would obtain fixed-length embeddings and generate new sample(s) programmatically. Later, we also describe how to do this via the command line. 
 
