@@ -35,11 +35,31 @@ of applications related to protein miniaturization, property optimization and so
 
 -----
 
-## Preprint 📜
+## Paper 📜
 
-**Devkota, K., Shonai, D., Mao, J., Soderling, S. H., & Singh, R.
-(2024). Miniaturizing, Modifying, and Augmenting Nature's Proteins with
-Raygun. bioRxiv, 2024-08.** [bioRxiv preprint](https://www.biorxiv.org/content/10.1101/2024.08.13.607858)
+**Devkota, K., Shonai, D., Mao, J. et al. Miniaturizing and modifying natural proteins with Raygun. Nature (2026). https://doi.org/10.1038/s41586-026-10842-8** 
+
+### Bibtex
+
+```
+@Article{Devkota2026,
+author={Devkota, Kapil
+and Shonai, Daichi
+and Mao, Joey
+and Ko, Young Su
+and Wang, Wei
+and Soderling, Scott
+and Singh, Rohit},
+title={Miniaturizing and modifying natural proteins with Raygun},
+journal={Nature},
+year={2026},
+month={Jul},
+day={29},
+issn={1476-4687},
+doi={10.1038/s41586-026-10842-8},
+url={https://doi.org/10.1038/s41586-026-10842-8}
+}
+```
 
 -----
 
