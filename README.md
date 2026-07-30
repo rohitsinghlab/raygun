@@ -44,6 +44,7 @@ Raygun. bioRxiv, 2024-08.** [bioRxiv preprint](https://www.biorxiv.org/content/1
 -----
 
 ## Updates 📢
+**[Jul 23, 2026] Our paper is now published in [Nature](https://www.nature.com/articles/s41586-026-10842-8)**
 **[Nov 3 - 3:00 pm] Updating the saved model on Zenodo to make it accessible to cpu-only systems.** 
 
 **[May 20] Added Raygun version 0.2.**
