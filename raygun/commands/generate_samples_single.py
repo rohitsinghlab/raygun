@@ -248,7 +248,9 @@ def main():
         name = record.id
         seq  = str(record.seq)
         len_ = len(seq)
-        pll  = get_PLL(seq, esmmodel, esmalphabet, bc)
+        pll  = get_PLL(seq, esmmodel, 
+                       esmalphabet, bc, 
+                       device=config["device"])
         
         # adjusted pll
         pll  = pll / abs(-0.406 * len_ + 1.363) 
