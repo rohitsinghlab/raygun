@@ -1,0 +1,15 @@
+2025-08-29 21:40:52,725 - __main__ - INFO - Started the Raygun generation process
+2025-08-29 21:40:52,725 - __main__ - INFO - Finetuning set to True. 
+2025-08-29 21:40:52,725 - __main__ - INFO - Penalizerepeats set to True.
+2025-08-29 21:40:52,725 - __main__ - INFO - Length-agnostic PLL filtering activated. Filter ratio: 0.9
+2025-08-29 21:40:52,725 - __main__ - INFO - Sample fasta file: gfp-fastas/egfp.fasta
+2025-08-29 21:40:58,225 - __main__ - INFO - Loading the pretrained Raygun model
+2025-08-29 21:41:10,328 - __main__ - INFO - Started the finetuning process for epoch 5
+2025-08-29 21:41:10,329 - __main__ - INFO - Finetuning on the fasta file: gfp-fastas/egfp_mcherry.fasta
+2025-08-29 21:41:12,110 - __main__ - INFO - Train Epoch 0 complete ---| per-epoch training cross-entropyloss: 0.1751166209578514 || per-epoch training reconstruction loss: 0.014093814417719841 || per-epoch training replicate loss: 0.0003012633096659556 || per-epoch total training loss: 0.18951169401407242 || per-epoch training blosum curr ratio: 0.9712472084819753 || per-epoch training blosum curr score: 1230.0 |
+2025-08-29 21:41:12,710 - __main__ - INFO - Train Epoch 1 complete ---| per-epoch training cross-entropyloss: 0.04848324367776513 || per-epoch training reconstruction loss: 0.013369744643568993 || per-epoch training replicate loss: 0.0010777694697026163 || per-epoch total training loss: 0.06293075531721115 || per-epoch training blosum curr ratio: 0.9908657664813344 || per-epoch training blosum curr score: 1255.0 |
+2025-08-29 21:41:13,301 - __main__ - INFO - Train Epoch 2 complete ---| per-epoch training cross-entropyloss: 0.006179478717967868 || per-epoch training reconstruction loss: 0.013783250004053116 || per-epoch training replicate loss: 0.00014830636064289138 || per-epoch total training loss: 0.02011103555560112 || per-epoch training blosum curr ratio: 0.9984114376489277 || per-epoch training blosum curr score: 1264.5 |
+2025-08-29 21:41:13,900 - __main__ - INFO - Train Epoch 3 complete ---| per-epoch training cross-entropyloss: 0.0006206277175806463 || per-epoch training reconstruction loss: 0.013916166499257088 || per-epoch training replicate loss: 0.00012017150584142655 || per-epoch total training loss: 0.014656965155154467 || per-epoch training blosum curr ratio: 1.0 || per-epoch training blosum curr score: 1266.5 |
+2025-08-29 21:41:14,496 - __main__ - INFO - Train Epoch 4 complete ---| per-epoch training cross-entropyloss: 0.000392279980587773 || per-epoch training reconstruction loss: 0.012982551008462906 || per-epoch training replicate loss: 0.0007068970444379374 || per-epoch total training loss: 0.014081728179007769 || per-epoch training blosum curr ratio: 1.0 || per-epoch training blosum curr score: 1266.5 |
+2025-08-29 21:41:14,500 - __main__ - INFO - Saving to results/egfp-raygun-v1-results/epoch_5.sav
+2025-08-29 21:41:24,467 - __main__ - INFO - Start Raygun sampling:

@@ -1,0 +1,7 @@
+2025-08-29 21:44:04,354 - __main__ - INFO - Started the Raygun generation process
+2025-08-29 21:44:04,354 - __main__ - INFO - Finetuning set to False. We strongly recommend to finetune the the pretrained Raygun model before using it THE FIRST TIME time for template-based protein generation. For later use, THE SAVED CHECKPOINTS can be used, setting finetune to False
+2025-08-29 21:44:04,354 - __main__ - INFO - Penalizerepeats set to True.
+2025-08-29 21:44:04,354 - __main__ - INFO - Length-agnostic PLL filtering activated. Filter ratio: 0.9
+2025-08-29 21:44:04,354 - __main__ - INFO - Sample fasta file: gfp-fastas/mcherry.fasta
+2025-08-29 21:44:09,833 - __main__ - INFO - Loading the checkpoint from results/egfp-raygun-v1-results/epoch_5.sav.
+2025-08-29 21:44:17,836 - __main__ - INFO - Start Raygun sampling:
